@@ -5,6 +5,7 @@ import { getDefaultsFromConfigSchema, openmrsFetch, showSnackbar, useConfig } fr
 import { type ConfigObject, configSchema } from '../config-schema';
 import type { Query } from '../types';
 import CohortBuilder from '../cohort-builder.component';
+import { addToHistory } from '../cohort-builder.utils';
 
 const programUuid = '64f950e6-1b07-4ac0-8e7e-f3e148f3463f';
 const drugUuid = '3cfcf118-931c-46f7-8ff6-7b876f0d4202';
@@ -50,11 +51,14 @@ const row = (patientId: number) => ({
 });
 
 let adHocQueryResults: Array<ReturnType<typeof row>[] | Error>;
+// Runs before an ad hoc query answers, e.g. to add a search made meanwhile from a tab.
+let beforeAdHocQueryAnswers: (call: number) => void;
 
 function mockServer() {
   let adHocQueryCalls = 0;
   mockOpenmrsFetch.mockImplementation(async (url: string) => {
     if (url.includes('/reportingrest/adhocquery')) {
+      beforeAdHocQueryAnswers(adHocQueryCalls);
       const result = adHocQueryResults[adHocQueryCalls++] ?? [];
       if (result instanceof Error) {
         throw result;
@@ -104,6 +108,7 @@ describe('useUrlDefinition', () => {
     window.sessionStorage.clear();
     mockUseConfig.mockReturnValue(getDefaultsFromConfigSchema(configSchema));
     adHocQueryResults = [[row(1), row(2), row(3)], [row(2), row(3)], [row(3), row(4)], [row(3)]];
+    beforeAdHocQueryAnswers = () => {};
     mockServer();
   });
 
@@ -138,6 +143,36 @@ describe('useUrlDefinition', () => {
 
     expect(window.location.search).toBe('?tab=1');
     expect(await screen.findByText('Jane Doe 3')).toBeInTheDocument();
+  });
+
+  it('composes only its own entries when a search from a tab lands in between', async () => {
+    beforeAdHocQueryAnswers = (call) => {
+      if (call === 1) {
+        addToHistory('Manual search', [], { rowFilters: [], customRowFilterCombination: '' } as Query);
+      }
+    };
+    openBuilderAt(`?definition=${encode({ v: 1, criteria: definition.criteria.slice(0, 2) })}`);
+
+    await waitFor(() => expect(history()).toHaveLength(4));
+    expect(history().map(({ description }) => description)).toEqual([
+      'Female Patients with ages between 15 and 49 years that are alive',
+      'Manual search',
+      'Patients enrolled in HIV Care and Treatment',
+      'Composition of 1 AND 3',
+    ]);
+  });
+
+  it('removes only its own entries when a search fails', async () => {
+    beforeAdHocQueryAnswers = (call) => {
+      if (call === 1) {
+        addToHistory('Manual search', [], { rowFilters: [], customRowFilterCombination: '' } as Query);
+      }
+    };
+    adHocQueryResults = [[row(1)], [row(1)], new Error('Internal Server Error')];
+    openBuilderAt(`?definition=${encode(definition)}`);
+
+    expect(await screen.findByText('This cohort builder link could not be opened')).toBeInTheDocument();
+    expect(history().map(({ description }) => description)).toEqual(['Manual search']);
   });
 
   it('composes with the newest history entries when history already has searches', async () => {

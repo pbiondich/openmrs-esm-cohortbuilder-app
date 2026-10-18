@@ -5,7 +5,6 @@ import { type ConfigObject } from '../config-schema';
 import { createCompositionQuery } from '../components/composition/composition.utils';
 import { getSearchHistory } from '../components/search-history/search-history.utils';
 import {
-  andLastEntries,
   buildSearch,
   type CohortDefinition,
   readUrlRequest,
@@ -82,8 +81,8 @@ async function runRequest(request: UrlRequest, handlers: UrlDefinitionHandlers, 
 }
 
 /**
- * Runs each criterion as its own search, then a composition ANDing them. If any search fails,
- * the history goes back to how it was, so a link never leaves half of its searches behind.
+ * Runs each criterion as its own search, then a composition ANDing them. If anything fails, the
+ * history entries this link added are removed again, so a link never leaves half of its searches behind.
  */
 async function runDefinition(
   definition: CohortDefinition,
@@ -91,33 +90,40 @@ async function runDefinition(
   drugOrderSearchDefinitionKey: string,
 ) {
   const { label, criteria } = definition;
-  const historyBefore = window.sessionStorage.getItem('openmrsHistory');
   const names = await fetchDisplayNames(definition);
+  // 1-based history positions of the entries this link added. Searches run meanwhile from the tabs are not included.
+  const addedEntries: number[] = [];
 
-  const runOrRollBack = async ({ searchParams, description }: Search) => {
-    if (await runSearch(searchParams, description)) {
-      return;
+  const runAndRecord = async ({ searchParams, description }: Search) => {
+    if (!(await runSearch(searchParams, description))) {
+      throw new Error(`The search "${description}" failed, so none of this link's searches were kept`);
     }
-    if (historyBefore === null) {
-      window.sessionStorage.removeItem('openmrsHistory');
-    } else {
-      window.sessionStorage.setItem('openmrsHistory', historyBefore);
-    }
-    onHistoryChange();
-    throw new Error(`The search "${description}" failed, so none of this link's searches were kept`);
+    // runSearch appends to the history just before it resolves, so the newest entry is this one.
+    addedEntries.push(getSearchHistory().length);
   };
 
-  for (const criterion of criteria) {
-    const search = buildSearch(criterion, names, drugOrderSearchDefinitionKey);
-    // A single criterion is the whole result, so it carries the label; otherwise the composition does.
-    await runOrRollBack({ ...search, description: criteria.length === 1 && label ? label : search.description });
+  try {
+    for (const criterion of criteria) {
+      const search = buildSearch(criterion, names, drugOrderSearchDefinitionKey);
+      // A single criterion is the whole result, so it carries the label; otherwise the composition does.
+      await runAndRecord({ ...search, description: criteria.length === 1 && label ? label : search.description });
+    }
+    if (criteria.length >= 2) {
+      const composition = addedEntries.join(' AND ');
+      await runAndRecord({
+        searchParams: createCompositionQuery(composition),
+        description: label || `Composition of ${composition}`,
+      });
+    }
+  } catch (error) {
+    removeHistoryEntries(addedEntries);
+    onHistoryChange();
+    throw error;
   }
+}
 
-  if (criteria.length >= 2) {
-    const composition = andLastEntries(getSearchHistory().length, criteria.length);
-    await runOrRollBack({
-      searchParams: createCompositionQuery(composition),
-      description: label || `Composition of ${composition}`,
-    });
-  }
+function removeHistoryEntries(positions: number[]) {
+  const history: unknown[] = JSON.parse(window.sessionStorage.getItem('openmrsHistory')) ?? [];
+  const remaining = history.filter((_, index) => !positions.includes(index + 1));
+  window.sessionStorage.setItem('openmrsHistory', JSON.stringify(remaining));
 }
