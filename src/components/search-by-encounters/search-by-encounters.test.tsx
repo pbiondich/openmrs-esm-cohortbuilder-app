@@ -215,4 +215,42 @@ describe('Test the search by encounters component', () => {
       `Patients with Encounter of Types Vitals at Pharmacy from POC Patient Consent v1.2 at least 10 times  and at most 20 times`,
     );
   });
+
+  it('empties the encounter types, forms and locations on Reset, and searches without them', async () => {
+    const user = userEvent.setup();
+    mockUseForms.mockImplementation(() => ({ forms: mockForms, isLoading: false, formsError: undefined }));
+    mockUseEncounterTypes.mockImplementation(() => ({
+      encounterTypes: mockEncounterTypes,
+      isLoading: false,
+      encounterTypesError: undefined,
+    }));
+    mockUseLocations.mockImplementation(() => ({
+      locations: mockLocations,
+      isLoading: false,
+      locationsError: undefined,
+    }));
+    const mockSubmit = vi.fn();
+    render(<SearchByEncounters onSubmit={mockSubmit} />);
+
+    await user.click(screen.getByText(/select encounter types/i));
+    await user.click(screen.getByText(/vitals/i));
+    await user.click(screen.getByText(/select forms/i));
+    await user.click(screen.getByText(/poc patient consent v1.2/i));
+    await user.click(screen.getByText(/select locations/i));
+    await user.click(screen.getByText(/pharmacy/i));
+    await user.keyboard('{Escape}');
+    await user.type(screen.getByRole('spinbutton', { name: /at least/i }), '3');
+    await user.click(screen.getByTestId('reset-btn'));
+
+    expect(screen.queryAllByRole('button', { name: /clear all selected items/i })).toHaveLength(0);
+    expect(screen.getByRole('spinbutton', { name: /at least/i })).toHaveValue(0);
+    await user.click(screen.getByText(/select encounter types/i));
+    await user.click(screen.getByText(/visit note/i));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByTestId('search-btn'));
+
+    expect(mockSubmit.mock.calls[0][0].query.rowFilters[0].parameterValues).toEqual({
+      encounterTypeList: [mockEncounterTypes[3].value],
+    });
+  });
 });
