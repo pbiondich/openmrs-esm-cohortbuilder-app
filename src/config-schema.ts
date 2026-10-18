@@ -1,4 +1,4 @@
-import { Type } from '@openmrs/esm-framework';
+import { Type, validator } from '@openmrs/esm-framework';
 
 // The RefApp demo programs (Initializer configuration/programs). Program uuids are site content, so other
 // distros replace these. "art" is both an HIV program alias here and an ARV drug alias: the parser tells
@@ -100,6 +100,7 @@ export const configSchema = {
       _type: Type.Number,
       _default: 2,
       _description: 'Characters needed before saved cohorts and saved queries are searched by name.',
+      _validators: [validator((value: number) => value >= 1, 'Must be at least 1.')],
     },
     programs: {
       _type: Type.Array,
