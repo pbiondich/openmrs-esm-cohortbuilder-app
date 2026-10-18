@@ -54,6 +54,7 @@ const SearchByEnrollments: React.FC<SearchByEnrollmentsProps> = ({ onSubmit, ini
 
   const handleResetInputs = () => {
     setSelectedPrograms(null);
+    setSelectedLocations(null);
     setEnrolledOnOrAfter('');
     setEnrolledOnOrBefore('');
     setCompletedOnOrAfter('');
