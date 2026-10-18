@@ -114,6 +114,7 @@ const CohortBuilder: React.FC = () => {
     runSearch,
     showCohort: getCohortResults,
     showQuery: getQueryResults,
+    onHistoryChange: () => setIsHistoryUpdated(true),
   });
 
   const tabs: TabItem[] = [
@@ -169,7 +170,7 @@ const CohortBuilder: React.FC = () => {
           <InlineNotification
             kind="error"
             lowContrast
-            title={t('invalidCohortBuilderLink', 'This cohort builder link is not valid')}
+            title={t('cohortBuilderLinkError', 'This cohort builder link could not be opened')}
             subtitle={urlDefinitionError}
           />
         )}

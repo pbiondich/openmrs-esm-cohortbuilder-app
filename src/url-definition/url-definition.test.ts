@@ -361,6 +361,7 @@ describe('toQueryDate', () => {
 });
 
 describe('buildSearch', () => {
+  const drugOrderSearchKey = 'reporting.library.cohortDefinition.builtIn.drugOrderSearch';
   const names = new Map([
     [programUuid, 'HIV Program'],
     [drugUuid, 'Triomune-30'],
@@ -377,17 +378,22 @@ describe('buildSearch', () => {
   });
 
   it('describes demographics like the demographics tab', () => {
-    expect(buildSearch({ type: 'demographics', gender: 'female', minAge: 15, maxAge: 49 }, names).description).toBe(
-      'Female Patients with ages between 15 and 49 years that are alive',
-    );
-    expect(buildSearch({ type: 'demographics', gender: 'any', maxAge: 5 }, names).description).toBe(
+    expect(
+      buildSearch({ type: 'demographics', gender: 'female', minAge: 15, maxAge: 49 }, names, drugOrderSearchKey)
+        .description,
+    ).toBe('Female Patients with ages between 15 and 49 years that are alive');
+    expect(buildSearch({ type: 'demographics', gender: 'any', maxAge: 5 }, names, drugOrderSearchKey).description).toBe(
       'All Patients with maximum age of 5 years that are alive',
     );
   });
 
   it('maps gender onto the built-in cohort definitions', () => {
     const keys = (gender: 'male' | 'female' | 'any') =>
-      buildSearch({ type: 'demographics', gender, minAge: 1 }, names).searchParams.query.rowFilters.map((f) => f.key);
+      buildSearch(
+        { type: 'demographics', gender, minAge: 1 },
+        names,
+        drugOrderSearchKey,
+      ).searchParams.query.rowFilters.map((f) => f.key);
 
     expect(keys('male')).toContain('reporting.library.cohortDefinition.builtIn.males');
     expect(keys('female')).toContain('reporting.library.cohortDefinition.builtIn.females');
@@ -395,33 +401,52 @@ describe('buildSearch', () => {
   });
 
   it('describes enrollments with program names', () => {
-    expect(buildSearch({ type: 'enrollment', programs: [programUuid] }, names).description).toBe(
+    expect(buildSearch({ type: 'enrollment', programs: [programUuid] }, names, drugOrderSearchKey).description).toBe(
       'Patients enrolled in HIV Program',
     );
   });
 
   it('falls back to a count when a name is missing', () => {
-    const search = buildSearch({ type: 'enrollment', programs: [programUuid, cielStyleUuid] }, names);
+    const search = buildSearch(
+      { type: 'enrollment', programs: [programUuid, cielStyleUuid] },
+      names,
+      drugOrderSearchKey,
+    );
     expect(search.description).toBe('Patients enrolled in 2 programs');
     expect(search.searchParams.query.rowFilters[0].parameterValues).toEqual({
       programs: [programUuid, cielStyleUuid],
     });
 
-    expect(buildSearch({ type: 'drugOrder', drugs: [drugUuid] }, new Map()).description).toBe(
+    expect(buildSearch({ type: 'drugOrder', drugs: [drugUuid] }, new Map(), drugOrderSearchKey).description).toBe(
       'Patients who taking 1 drug',
     );
   });
 
   it('describes drug orders with drug names and dates', () => {
     expect(
-      buildSearch({ type: 'drugOrder', drugs: [drugUuid, otherDrugUuid], activeOnOrAfter: 'today' }, names).description,
+      buildSearch(
+        { type: 'drugOrder', drugs: [drugUuid, otherDrugUuid], activeOnOrAfter: 'today' },
+        names,
+        drugOrderSearchKey,
+      ).description,
     ).toMatch(/^Patients who taking Triomune-30 and Efavirenz on or after /);
+  });
+
+  it('uses the configured drug order search definition key', () => {
+    const search = buildSearch(
+      { type: 'drugOrder', drugs: [drugUuid] },
+      names,
+      'configuration.definitionlibrary.cohort.drugOrderSearch',
+    );
+    expect(search.searchParams.query.rowFilters.map((filter) => filter.key)).toEqual([
+      'configuration.definitionlibrary.cohort.drugOrderSearch',
+    ]);
   });
 
   it('resolves "today" when the search is built', () => {
     const activeOnOrAfter = () =>
-      buildSearch({ type: 'drugOrder', drugs: [drugUuid], activeOnOrAfter: 'today' }, names).searchParams.query
-        .rowFilters[0].parameterValues;
+      buildSearch({ type: 'drugOrder', drugs: [drugUuid], activeOnOrAfter: 'today' }, names, drugOrderSearchKey)
+        .searchParams.query.rowFilters[0].parameterValues;
 
     expect(activeOnOrAfter()).toEqual({ activeOnOrAfter: '2026-10-17T00:00:00+00:00', drugs: [drugUuid] });
     vi.setSystemTime(new Date('2026-10-18T00:00:01Z'));
