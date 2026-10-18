@@ -4,6 +4,7 @@ import { showSnackbar } from '@openmrs/esm-framework';
 
 import { useTranslation } from 'react-i18next';
 import { useLocations } from '../../cohort-builder.resources';
+import { withSelectedItems } from '../../cohort-builder.utils';
 import { type DropdownValue, type SearchByProps } from '../../types';
 import { getQueryDetails, getDescription } from './search-by-location.utils';
 import SearchButtonSet from '../search-button-set/search-button-set';
@@ -31,6 +32,7 @@ const SearchByLocation: React.FC<SearchByProps> = ({ onSubmit }) => {
   const { locations, locationsError } = useLocations();
   const [selectedLocations, setSelectedLocations] = useState<DropdownValue[]>(null);
   const [selectedMethod, setSelectedMethod] = useState<DropdownValue>(methods[0]);
+  const locationOptions = withSelectedItems(locations, selectedLocations);
   const [isLoading, setIsLoading] = useState(false);
 
   if (locationsError) {
@@ -44,7 +46,7 @@ const SearchByLocation: React.FC<SearchByProps> = ({ onSubmit }) => {
 
   const handleResetInputs = () => {
     setSelectedLocations(null);
-    setSelectedMethod(null);
+    setSelectedMethod(methods[0]);
   };
 
   const submit = async () => {
@@ -65,7 +67,8 @@ const SearchByLocation: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="locations"
             data-testid="locations"
             onChange={(data) => setSelectedLocations(data.selectedItems)}
-            items={locations}
+            items={locationOptions.items}
+            selectedItems={locationOptions.selectedItems}
             label={t('selectLocations', 'Select locations')}
             placeholder={t('searchForALocation', 'Search for a location')}
           />
@@ -77,7 +80,7 @@ const SearchByLocation: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="methods"
             data-testid="methods"
             onChange={(data) => setSelectedMethod(data.selectedItem)}
-            initialSelectedItem={methods[0]}
+            selectedItem={methods.find(({ value }) => value === selectedMethod.value)}
             items={methods}
             label={t('selectMethod', 'Select a method')}
             titleText=""
