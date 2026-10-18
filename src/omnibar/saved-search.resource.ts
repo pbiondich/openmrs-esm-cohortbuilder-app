@@ -17,9 +17,22 @@ export interface SavedSearchHit {
   size?: number;
 }
 
-/** Answers can come from any server version or proxy, so each entry is checked before it is read. */
+/**
+ * Answers can come from any server version or proxy. The mappers check that an entry is an object
+ * before reading it, and keep a field only when it has the type the row needs.
+ */
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Text with something to see: not empty once spaces and format characters such as U+200B are gone. */
+export function hasVisibleText(value: unknown): value is string {
+  return typeof value === 'string' && value.replace(/\p{Cf}/gu, '').trim() !== '';
+}
+
+/** The text, or nothing when it isn't text, so a row never carries an object for the host to draw. */
+export function textOrNothing(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 export const savedSearchDelayMs = 250;

@@ -4,7 +4,13 @@ import { restBaseUrl, useConfig } from '@openmrs/esm-framework';
 import { type ConfigObject } from '../../config-schema';
 import { savedCohortUrl } from '../cohort-builder-links';
 import { type OmnibarProviderProps } from '../omnibar-contract';
-import { isPlainObject, type SavedSearchHit, useSavedSearch } from '../saved-search.resource';
+import {
+  hasVisibleText,
+  isPlainObject,
+  type SavedSearchHit,
+  textOrNothing,
+  useSavedSearch,
+} from '../saved-search.resource';
 import { useCohortRowsAllowed } from '../use-cohort-rows-allowed';
 
 /**
@@ -21,13 +27,11 @@ const maxResults = 5;
 
 function toCohortHits(data: unknown): Array<SavedSearchHit> {
   return ((data as CohortResponse)?.results ?? [])
-    .filter(
-      (cohort) => isPlainObject(cohort) && !cohort.voided && typeof cohort.name === 'string' && cohort.name.trim(),
-    )
+    .filter((cohort) => isPlainObject(cohort) && !cohort.voided && hasVisibleText(cohort.name))
     .map((cohort) => ({
       uuid: cohort.uuid,
       name: cohort.name,
-      description: cohort.description,
+      description: textOrNothing(cohort.description),
       size: cohort.size,
     }))
     .slice(0, maxResults);

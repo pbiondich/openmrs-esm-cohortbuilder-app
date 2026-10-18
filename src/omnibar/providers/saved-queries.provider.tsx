@@ -4,7 +4,13 @@ import { restBaseUrl, useConfig } from '@openmrs/esm-framework';
 import { type ConfigObject } from '../../config-schema';
 import { savedQueryUrl } from '../cohort-builder-links';
 import { type OmnibarProviderProps } from '../omnibar-contract';
-import { isPlainObject, type SavedSearchHit, useSavedSearch } from '../saved-search.resource';
+import {
+  hasVisibleText,
+  isPlainObject,
+  type SavedSearchHit,
+  textOrNothing,
+  useSavedSearch,
+} from '../saved-search.resource';
 import { useCohortRowsAllowed } from '../use-cohort-rows-allowed';
 
 /**
@@ -31,9 +37,9 @@ export function toQueryHits(data: unknown): Array<SavedSearchHit> {
     .map((definition) => ({
       uuid: definition.uuid,
       name: definition.name.slice(adHocPrefix.length).trim(),
-      description: definition.description,
+      description: textOrNothing(definition.description),
     }))
-    .filter((hit) => hit.name);
+    .filter((hit) => hasVisibleText(hit.name));
 }
 
 const SavedQueriesProvider: React.FC<OmnibarProviderProps> = (props) => {
