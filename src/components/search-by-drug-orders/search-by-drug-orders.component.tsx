@@ -140,7 +140,12 @@ const SearchByDrugOrder: React.FC<SearchByDrugOrderProps> = ({ onSubmit, initial
           />
         </Column>
       </div>
-      <SearchButtonSet onHandleReset={handleResetInputs} onHandleSubmit={submit} isLoading={isLoading} />
+      <SearchButtonSet
+        onHandleReset={handleResetInputs}
+        onHandleSubmit={submit}
+        isLoading={isLoading}
+        isDisabled={!selectedDrugs?.length}
+      />
     </>
   );
 };
