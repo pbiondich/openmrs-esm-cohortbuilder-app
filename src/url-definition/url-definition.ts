@@ -11,11 +11,11 @@ export const URL_PARAMS = ['definition', 'cohort', 'query'] as const;
 
 export const MAX_DEFINITION_BYTES = 4096;
 const MAX_ENCODED_LENGTH = Math.ceil(MAX_DEFINITION_BYTES / 3) * 4;
-const MAX_LABEL_LENGTH = 200;
-const MAX_CRITERIA = 5;
-const MAX_PROGRAMS = 10;
-const MAX_DRUGS = 50;
-const MAX_AGE = 150;
+export const MAX_LABEL_LENGTH = 200;
+export const MAX_CRITERIA = 5;
+export const MAX_PROGRAMS = 10;
+export const MAX_DRUGS = 50;
+export const MAX_AGE = 150;
 
 // Standard uuids, plus 36-character CIEL-style ids such as "1065AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".
 const UUID_PATTERN = /^[0-9A-Za-z-]{36}$/;
@@ -146,6 +146,24 @@ const definitionTooLarge = () =>
   });
 
 const notBase64Url = () => new LinkError('definitionNotBase64Url', 'Definition is not valid base64url');
+
+/**
+ * The inverse of decodeDefinition: unpadded base64url of the UTF-8 JSON. Null when decodeDefinition
+ * would refuse the result, so a link the builder can't open is never made.
+ */
+export function encodeDefinition(definition: CohortDefinition): string | null {
+  let binary = '';
+  for (const byte of new TextEncoder().encode(JSON.stringify(definition))) {
+    binary += String.fromCharCode(byte);
+  }
+  const encoded = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  try {
+    decodeDefinition(encoded);
+  } catch {
+    return null;
+  }
+  return encoded;
+}
 
 export function validateDefinition(value: unknown): CohortDefinition {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {

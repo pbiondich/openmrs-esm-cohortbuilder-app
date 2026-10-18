@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { interpolateUrl } from '@openmrs/esm-framework';
 import { readUrlRequest } from '../url-definition/url-definition';
 import { cohortBuilderPath, definitionUrl, savedCohortUrl, savedQueryUrl } from './cohort-builder-links';
@@ -14,13 +14,20 @@ describe('cohort builder links', () => {
     expect(readUrlRequest(paramsOf(url))).toEqual({ type: 'definition', definition });
   });
 
-  it('lands on the cohort builder page once the framework fills in the SPA base', () => {
-    // interpolateUrl trims the base's trailing slash, so the path brings its own.
-    const definition = definitionUrl({ v: 1, criteria: [{ type: 'demographics', gender: 'male' }] });
-    expect(interpolateUrl(cohortBuilderPath)).toBe('/openmrs/spa/cohort-builder');
-    expect(interpolateUrl(definition)).toMatch(/^\/openmrs\/spa\/cohort-builder\?definition=[A-Za-z0-9_-]+$/);
-    expect(interpolateUrl(savedCohortUrl(uuid))).toBe(`/openmrs/spa/cohort-builder?cohort=${uuid}`);
-    expect(interpolateUrl(savedQueryUrl(uuid))).toBe(`/openmrs/spa/cohort-builder?query=${uuid}`);
+  describe('once the framework fills in the SPA base', () => {
+    const { getOpenmrsSpaBase } = window;
+    // As the app shell sets it: with a trailing slash.
+    beforeAll(() => (window.getOpenmrsSpaBase = () => '/openmrs/spa/'));
+    afterAll(() => (window.getOpenmrsSpaBase = getOpenmrsSpaBase));
+
+    it('lands on the cohort builder page', () => {
+      // interpolateUrl trims the base's trailing slash, so the path brings its own.
+      const definition = definitionUrl({ v: 1, criteria: [{ type: 'demographics', gender: 'male' }] });
+      expect(interpolateUrl(cohortBuilderPath)).toBe('/openmrs/spa/cohort-builder');
+      expect(interpolateUrl(definition)).toMatch(/^\/openmrs\/spa\/cohort-builder\?definition=[A-Za-z0-9_-]+$/);
+      expect(interpolateUrl(savedCohortUrl(uuid))).toBe(`/openmrs/spa/cohort-builder?cohort=${uuid}`);
+      expect(interpolateUrl(savedQueryUrl(uuid))).toBe(`/openmrs/spa/cohort-builder?query=${uuid}`);
+    });
   });
 
   it('makes no link for a definition the builder would refuse', () => {
