@@ -19,7 +19,8 @@ interface SearchDatePickerProps {
  * which flatpickr shows by emptying the input.
  */
 const parseDate = (text: string) => {
-  const date = dayjs(text.trim(), ['DD-MM-YYYY', 'D-M-YYYY'], true);
+  // Strict parsing compares the text with the date formatted back, so each way of padding needs its own format.
+  const date = dayjs(text.trim(), ['DD-MM-YYYY', 'D-MM-YYYY', 'DD-M-YYYY', 'D-M-YYYY'], true);
   return date.isValid() ? date.toDate() : false;
 };
 
