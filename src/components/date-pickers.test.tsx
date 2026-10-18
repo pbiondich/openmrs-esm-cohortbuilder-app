@@ -140,6 +140,22 @@ describe('date pickers', () => {
     });
   });
 
+  it.each([
+    ['only from', 0, 'startDate', 'born on or after'],
+    ['only until', 1, 'endDate', 'born on or before'],
+  ])('searches with a birth date range open at one end, %s', async (_, index, parameter, described) => {
+    const onSubmit = vi.fn();
+    render(<SearchByDemographics onSubmit={onSubmit} />);
+
+    pick(dateInputs()[index], new Date(2024, 11, 31));
+    const [{ query }, description] = await search(onSubmit);
+
+    expect(query.rowFilters.find(({ key }) => key.endsWith('bornDuringPeriod')).parameterValues).toEqual({
+      [parameter]: dayjs(new Date(2024, 11, 31)).format(),
+    });
+    expect(description).toContain(`${described} ${dayjs(new Date(2024, 11, 31)).format()}`);
+  });
+
   it("shows and searches with a definition link's enrollment dates", async () => {
     const onSubmit = vi.fn();
     const { enrollment } = toFormValues(
