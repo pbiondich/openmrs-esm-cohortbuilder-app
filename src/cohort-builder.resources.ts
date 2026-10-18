@@ -88,9 +88,15 @@ const PATIENT_FETCH_CONCURRENCY = 6;
 /**
  * webservices.rest has no cohort members endpoint, only the paged `cohort/{uuid}/membership`
  * subresource, which gives patient uuids. The first MAX_COHORT_MEMBERS_SHOWN active members are
- * then loaded for the results table; `total` is the number of active members.
+ * then loaded for the results table. `total` counts active members and `unavailable` those of the
+ * loaded ones that could not be shown. Throws when there are active members but none could be shown.
  */
-export const getCohortMembers = async (cohortId: string): Promise<{ patients: Patient[]; total: number }> => {
+export const getCohortMembers = async (
+  cohortId: string,
+): Promise<{ patients: Patient[]; total: number; unavailable: number }> => {
+  if (!isUuid(cohortId)) {
+    throw new Error(`Not a cohort uuid: ${cohortId}`);
+  }
   const memberships = await getAllMemberships(cohortId);
   const now = new Date();
   const activePatientUuids = memberships
@@ -98,12 +104,14 @@ export const getCohortMembers = async (cohortId: string): Promise<{ patients: Pa
     .map((membership) => membership.patientUuid)
     .filter(isUuid);
 
-  const patients = await mapWithConcurrency(
-    activePatientUuids.slice(0, MAX_COHORT_MEMBERS_SHOWN),
-    PATIENT_FETCH_CONCURRENCY,
-    getCohortMember,
+  const membersToShow = activePatientUuids.slice(0, MAX_COHORT_MEMBERS_SHOWN);
+  const patients = (await mapWithConcurrency(membersToShow, PATIENT_FETCH_CONCURRENCY, getCohortMember)).filter(
+    Boolean,
   );
-  return { patients: patients.filter(Boolean), total: activePatientUuids.length };
+  if (membersToShow.length > 0 && patients.length === 0) {
+    throw new Error("None of the cohort's members could be loaded");
+  }
+  return { patients, total: activePatientUuids.length, unavailable: membersToShow.length - patients.length };
 };
 
 async function getAllMemberships(cohortId: string) {

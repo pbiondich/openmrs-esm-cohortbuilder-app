@@ -30,13 +30,13 @@ const CohortBuilder: React.FC = () => {
   const { t } = useTranslation();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isHistoryUpdated, setIsHistoryUpdated] = useState(true);
-  const [truncatedCohortSize, setTruncatedCohortSize] = useState<number | null>(null);
+  const [cohortMemberCounts, setCohortMemberCounts] = useState<{ total: number; unavailable: number } | null>(null);
   const isLayoutTablet = useLayoutType() === 'tablet';
 
   const runSearch = (searchParams: SearchParams, queryDescription: string): Promise<boolean> => {
     return new Promise((resolve) => {
       setPatients([]);
-      setTruncatedCohortSize(null);
+      setCohortMemberCounts(null);
       search(searchParams)
         .then(({ data: { rows } }) => {
           rows.map((patient: Patient) => {
@@ -72,7 +72,7 @@ const CohortBuilder: React.FC = () => {
     try {
       const patients = await getDataSet(queryId);
       setPatients(patients);
-      setTruncatedCohortSize(null);
+      setCohortMemberCounts(null);
       showSnackbar({
         title: t('searchCompleted', 'Search completed'),
         kind: 'success',
@@ -95,9 +95,9 @@ const CohortBuilder: React.FC = () => {
 
   const getCohortResults = async (cohortId: string) => {
     try {
-      const { patients, total } = await getCohortMembers(cohortId);
+      const { patients, total, unavailable } = await getCohortMembers(cohortId);
       setPatients(patients);
-      setTruncatedCohortSize(total > MAX_COHORT_MEMBERS_SHOWN ? total : null);
+      setCohortMemberCounts({ total, unavailable });
       showSnackbar({
         title: t('searchCompleted', 'Search completed'),
         kind: 'success',
@@ -202,14 +202,24 @@ const CohortBuilder: React.FC = () => {
               </Tabs>
             </div>
           </div>
-          {truncatedCohortSize !== null && (
+          {cohortMemberCounts?.total > MAX_COHORT_MEMBERS_SHOWN && (
             <InlineNotification
               kind="info"
               lowContrast
               hideCloseButton
               title={t('cohortMembersLimited', 'Showing the first {{shown}} of {{total}} members', {
                 shown: MAX_COHORT_MEMBERS_SHOWN,
-                total: truncatedCohortSize,
+                total: cohortMemberCounts.total,
+              })}
+            />
+          )}
+          {cohortMemberCounts?.unavailable > 0 && (
+            <InlineNotification
+              kind="warning"
+              lowContrast
+              hideCloseButton
+              title={t('cohortMembersUnavailable', '{{count}} members could not be shown', {
+                count: cohortMemberCounts.unavailable,
               })}
             />
           )}
