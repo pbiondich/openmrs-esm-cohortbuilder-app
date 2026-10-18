@@ -4,23 +4,32 @@ import { Column, DatePicker, DatePickerInput, Dropdown, MultiSelect } from '@car
 import { useTranslation } from 'react-i18next';
 import { showSnackbar, useConfig } from '@openmrs/esm-framework';
 import { type ConfigObject } from '../../config-schema';
+import { withSelectedItems } from '../../cohort-builder.utils';
 import type { DropdownValue, DrugOrderDetails, SearchByProps } from '../../types';
 import { getDescription, getQueryDetails } from './search-by-drug-orders.utils';
 import { useCareSettings, useDrugs } from './search-by-drug-orders.resources';
 import SearchButtonSet from '../search-button-set/search-button-set';
 import styles from './search-by-drug-orders.style.scss';
 
-const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
+interface SearchByDrugOrderProps extends SearchByProps {
+  /** The values to start with, such as a definition link's. */
+  initialValues?: DrugOrderDetails;
+}
+
+const SearchByDrugOrder: React.FC<SearchByDrugOrderProps> = ({ onSubmit, initialValues }) => {
   const { t } = useTranslation();
   const { drugOrderSearchDefinitionKey } = useConfig<ConfigObject>();
   const { drugs, drugsError } = useDrugs();
   const { careSettings, careSettingsError } = useCareSettings();
-  const [activeOnOrAfter, setActiveOnOrAfter] = useState('');
-  const [activeOnOrBefore, setActiveOnOrBefore] = useState('');
-  const [activatedOnOrAfter, setActivatedOnOrAfter] = useState('');
-  const [activatedOnOrBefore, setActivatedOnOrBefore] = useState('');
-  const [selectedDrugs, setSelectedDrugs] = useState<DropdownValue[]>(null);
-  const [selectedCareSetting, setSelectedCareSetting] = useState<DropdownValue>(null);
+  const [activeOnOrAfter, setActiveOnOrAfter] = useState(initialValues?.activeOnOrAfter ?? '');
+  const [activeOnOrBefore, setActiveOnOrBefore] = useState(initialValues?.activeOnOrBefore ?? '');
+  const [activatedOnOrAfter, setActivatedOnOrAfter] = useState(initialValues?.activatedOnOrAfter ?? '');
+  const [activatedOnOrBefore, setActivatedOnOrBefore] = useState(initialValues?.activatedOnOrBefore ?? '');
+  const [selectedDrugs, setSelectedDrugs] = useState<DropdownValue[]>(initialValues?.selectedDrugs ?? null);
+  const [selectedCareSetting, setSelectedCareSetting] = useState<DropdownValue>(
+    initialValues?.selectedCareSetting ?? null,
+  );
+  const drugOptions = withSelectedItems(drugs, selectedDrugs);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -76,7 +85,8 @@ const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="drugs"
             data-testid="drugs"
             onChange={(data) => setSelectedDrugs(data.selectedItems)}
-            items={drugs}
+            items={drugOptions.items}
+            selectedItems={drugOptions.selectedItems}
             label={t('selectDrugs', 'Select drugs')}
           />
         </div>
@@ -87,7 +97,7 @@ const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="careSettings"
             data-testid="careSettings"
             onChange={(data) => setSelectedCareSetting(data.selectedItem)}
-            initialSelectedItem={careSettings[0]}
+            initialSelectedItem={selectedCareSetting ?? careSettings[0]}
             items={careSettings}
             label={t('selectCareSettings', 'Select a care setting')}
             titleText=""
