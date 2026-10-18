@@ -26,7 +26,7 @@ Links can open the builder with a search already run. The page reads one of thes
 | `?cohort=<uuid>` | Shows the members of a saved cohort (the first 200 active members; a note says when there are more). It is not added to the search history. |
 | `?query=<uuid>` | Runs a saved query |
 
-If several are given, `definition` wins over `cohort`, which wins over `query`; the others are ignored with a console warning. The parameter is removed from the URL (with `history.replaceState`) as soon as it is read, so reloading the page does not run it again.
+If several are given, `definition` wins over `cohort`, which wins over `query`; the others are ignored with a console warning. The parameter is removed from the URL (with `history.replaceState`) as soon as it is read, so reloading the page does not run it again. A link opened while the builder is already shown (for example from the omnibar) runs too; if one is still running, the newest waiting link runs after it.
 
 ### The definition
 

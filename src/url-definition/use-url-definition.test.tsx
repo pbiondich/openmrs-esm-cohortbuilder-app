@@ -1,6 +1,6 @@
 import React, { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { getDefaultsFromConfigSchema, openmrsFetch, showSnackbar, useConfig } from '@openmrs/esm-framework';
 import { type ConfigObject, configSchema } from '../config-schema';
 import type { Query } from '../types';
@@ -54,7 +54,7 @@ const row = (patientId: number) => ({
 
 let adHocQueryResults: Array<ReturnType<typeof row>[] | Error>;
 // Runs before an ad hoc query answers, e.g. to add a search made meanwhile from a tab.
-let beforeAdHocQueryAnswers: (call: number) => void;
+let beforeAdHocQueryAnswers: (call: number) => void | Promise<void>;
 
 function mockServer() {
   let adHocQueryCalls = 0;
@@ -63,7 +63,7 @@ function mockServer() {
       throw new Error("Object with given uuid doesn't exist");
     }
     if (url.includes('/reportingrest/adhocquery')) {
-      beforeAdHocQueryAnswers(adHocQueryCalls);
+      await beforeAdHocQueryAnswers(adHocQueryCalls);
       const result = adHocQueryResults[adHocQueryCalls++] ?? [];
       if (result instanceof Error) {
         throw result;
@@ -96,6 +96,14 @@ const adHocQueryBodies = () =>
     .map(([, init]) => JSON.parse(JSON.stringify(init.body)) as Query);
 
 const history = () => JSON.parse(window.sessionStorage.getItem('openmrsHistory')) ?? [];
+
+// What single-spa's navigateToUrl does when a link to the page that is already shown is opened.
+function openLinkWhileShown(search: string) {
+  act(() => {
+    window.history.pushState(null, '', `/openmrs/spa/cohort-builder${search}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+}
 
 function openBuilderAt(search: string) {
   window.history.replaceState(null, '', `/openmrs/spa/cohort-builder${search}`);
@@ -305,6 +313,39 @@ describe('useUrlDefinition', () => {
       mockOpenmrsFetch.mock.calls.filter(([url]) => url.includes(`/reportingrest/dataSet/${queryUuid}`)),
     ).toHaveLength(1);
     expect(window.location.search).toBe('');
+  });
+
+  it('runs a link opened while the page is shown', async () => {
+    openBuilderAt('?tab=1');
+    await screen.findByText('Search History');
+
+    openLinkWhileShown(
+      `?definition=${encode({ v: 1, label: 'Adults', criteria: [{ type: 'demographics', minAge: 18 }] })}`,
+    );
+
+    await waitFor(() => expect(history()).toHaveLength(1));
+    expect(history()[0].description).toBe('Adults');
+    expect(window.location.search).toBe('');
+  });
+
+  it('runs only the latest link opened while another is running, after it', async () => {
+    let answerFirstSearch: () => void;
+    beforeAdHocQueryAnswers = (call) =>
+      call === 0 ? new Promise<void>((resolve) => (answerFirstSearch = resolve)) : undefined;
+    const link = (label: string) =>
+      `?definition=${encode({ v: 1, label, criteria: [{ type: 'demographics', minAge: 18 }] })}`;
+    openBuilderAt(link('First'));
+    await waitFor(() => expect(adHocQueryBodies()).toHaveLength(1));
+
+    openLinkWhileShown(link('Second'));
+    openLinkWhileShown(link('Third'));
+    expect(window.location.search).toBe('');
+    expect(adHocQueryBodies()).toHaveLength(1);
+
+    answerFirstSearch();
+    await waitFor(() => expect(history()).toHaveLength(2));
+    expect(history().map(({ description }) => description)).toEqual(['First', 'Third']);
+    expect(adHocQueryBodies()).toHaveLength(2);
   });
 
   it('does nothing without URL params', async () => {
