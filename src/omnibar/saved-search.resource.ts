@@ -17,6 +17,11 @@ export interface SavedSearchHit {
   size?: number;
 }
 
+/** Answers can come from any server version or proxy, so each entry is checked before it is read. */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export const savedSearchDelayMs = 250;
 export const savedSearchCacheMs = 60_000;
 const maxCachedSearches = 50;
@@ -79,7 +84,14 @@ export function useSavedSearch(url: string | null, toHits: (data: unknown) => Ar
       openmrsFetch(url, { signal: controller.signal }).then(
         (response) => {
           if (controller.signal.aborted) return;
-          const hits = toHits(response.data).filter((hit) => isUuid(hit.uuid));
+          let hits: Array<SavedSearchHit>;
+          try {
+            hits = toHits(response.data).filter((hit) => isUuid(hit.uuid));
+          } catch {
+            // An answer that can't be read is a plain error, not an unreachable server, and isn't remembered.
+            setState({ ...settled(url), error: true });
+            return;
+          }
           remember(url, hits);
           setState(settled(url, hits));
         },

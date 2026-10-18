@@ -4,7 +4,7 @@ import { restBaseUrl, useConfig } from '@openmrs/esm-framework';
 import { type ConfigObject } from '../../config-schema';
 import { savedQueryUrl } from '../cohort-builder-links';
 import { type OmnibarProviderProps } from '../omnibar-contract';
-import { type SavedSearchHit, useSavedSearch } from '../saved-search.resource';
+import { isPlainObject, type SavedSearchHit, useSavedSearch } from '../saved-search.resource';
 import { useCohortRowsAllowed } from '../use-cohort-rows-allowed';
 
 /**
@@ -23,14 +23,17 @@ const adHocPrefix = '[AdHocDataExport]';
 const maxResults = 5;
 const maxSavedQueries = 100;
 
-function toQueryHits(data: unknown): Array<SavedSearchHit> {
+/** Saved queries whose name is only the prefix have nothing to show, so they are dropped. */
+export function toQueryHits(data: unknown): Array<SavedSearchHit> {
   return ((data as DataSetDefinitionResponse)?.results ?? [])
-    .filter((definition) => definition.name?.startsWith(adHocPrefix))
+    .filter((definition) => isPlainObject(definition) && typeof definition.name === 'string')
+    .filter((definition) => definition.name.startsWith(adHocPrefix))
     .map((definition) => ({
       uuid: definition.uuid,
       name: definition.name.slice(adHocPrefix.length).trim(),
       description: definition.description,
-    }));
+    }))
+    .filter((hit) => hit.name);
 }
 
 const SavedQueriesProvider: React.FC<OmnibarProviderProps> = (props) => {
@@ -38,7 +41,7 @@ const SavedQueriesProvider: React.FC<OmnibarProviderProps> = (props) => {
   const { t } = useTranslation();
   const { omnibar } = useConfig<ConfigObject>();
   // An id is a patient lookup: no saved search, so nothing appears under the patient while it loads.
-  const active = useCohortRowsAllowed(props) && query.length >= omnibar.savedSearchMinCharacters;
+  const active = useCohortRowsAllowed(props) && query.length >= Math.max(1, omnibar.savedSearchMinCharacters);
   const url = active
     ? `${restBaseUrl}/reportingrest/dataSetDefinition?${new URLSearchParams({
         q: adHocPrefix,
