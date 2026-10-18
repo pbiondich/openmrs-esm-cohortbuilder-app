@@ -4,12 +4,13 @@ import { restBaseUrl, useConfig } from '@openmrs/esm-framework';
 import { type ConfigObject } from '../../config-schema';
 import { savedCohortUrl } from '../cohort-builder-links';
 import { type OmnibarProviderProps } from '../omnibar-contract';
-import { type SavedSearchHit, useSavedSearch } from '../saved-search.resource';
+import { isPlainObject, type SavedSearchHit, useSavedSearch } from '../saved-search.resource';
 import { useCohortRowsAllowed } from '../use-cohort-rows-allowed';
 
 /**
  * Saved cohorts by name, from core's `GET /cohort?q=` (case-insensitive "contains"). Each opens in the
- * cohort builder. Core's name search includes voided cohorts, so those are dropped here.
+ * cohort builder. Core's name search includes voided cohorts, so those are dropped here, and so are
+ * cohorts with no name to show.
  */
 
 interface CohortResponse {
@@ -20,10 +21,12 @@ const maxResults = 5;
 
 function toCohortHits(data: unknown): Array<SavedSearchHit> {
   return ((data as CohortResponse)?.results ?? [])
-    .filter((cohort) => !cohort.voided)
+    .filter(
+      (cohort) => isPlainObject(cohort) && !cohort.voided && typeof cohort.name === 'string' && cohort.name.trim(),
+    )
     .map((cohort) => ({
       uuid: cohort.uuid,
-      name: cohort.name ?? '',
+      name: cohort.name,
       description: cohort.description,
       size: cohort.size,
     }))
@@ -35,7 +38,7 @@ const SavedCohortsProvider: React.FC<OmnibarProviderProps> = (props) => {
   const { t } = useTranslation();
   const { omnibar } = useConfig<ConfigObject>();
   // An id is a patient lookup: no saved search, so nothing appears under the patient while it loads.
-  const active = useCohortRowsAllowed(props) && query.length >= omnibar.savedSearchMinCharacters;
+  const active = useCohortRowsAllowed(props) && query.length >= Math.max(1, omnibar.savedSearchMinCharacters);
   const url = active
     ? `${restBaseUrl}/cohort?${new URLSearchParams({
         q: query,
