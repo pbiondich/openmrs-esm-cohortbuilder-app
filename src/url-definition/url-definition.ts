@@ -164,8 +164,9 @@ function validateCriterion(value: unknown, index: number): Criterion {
       if (gender !== 'male' && gender !== 'female' && gender !== 'any') {
         throw new Error(`${name}: "gender" must be "male", "female" or "any"`);
       }
-      expectOptionalAge(minAge, `${name}: "minAge"`);
-      expectOptionalAge(maxAge, `${name}: "maxAge"`);
+      expectOptionalAge(minAge, `${name}: "minAge"`, 0);
+      // The demographics builder treats an age of 0 as "no bound", which would turn maxAge 0 into "any age".
+      expectOptionalAge(maxAge, `${name}: "maxAge"`, 1);
       if (minAge !== undefined && maxAge !== undefined && minAge > maxAge) {
         throw new Error(`${name}: "minAge" must not be greater than "maxAge"`);
       }
@@ -216,9 +217,9 @@ function expectObject(value: unknown, name: string, allowedKeys: string[]): Reco
   return value as Record<string, unknown>;
 }
 
-function expectOptionalAge(value: unknown, name: string) {
-  if (value !== undefined && (!Number.isInteger(value) || (value as number) < 0 || (value as number) > MAX_AGE)) {
-    throw new Error(`${name} must be a whole number from 0 to ${MAX_AGE}`);
+function expectOptionalAge(value: unknown, name: string, min: number) {
+  if (value !== undefined && (!Number.isInteger(value) || (value as number) < min || (value as number) > MAX_AGE)) {
+    throw new Error(`${name} must be a whole number from ${min} to ${MAX_AGE}`);
   }
 }
 
