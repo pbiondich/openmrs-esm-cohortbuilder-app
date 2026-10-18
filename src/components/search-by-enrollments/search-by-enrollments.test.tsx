@@ -1,7 +1,7 @@
 import React from 'react';
 import { vi, describe, it, expect, type Mock } from 'vitest';
 import userEvent from '@testing-library/user-event';
-import { openmrsFetch } from '@openmrs/esm-framework';
+import { openmrsFetch, showSnackbar } from '@openmrs/esm-framework';
 import { render, screen } from '@testing-library/react';
 import { useLocations } from '../../cohort-builder.resources';
 import type * as CohortBuilderResources from '../../cohort-builder.resources';
@@ -141,5 +141,22 @@ describe('Test the search by enrollments component', () => {
       expectedQuery,
       `Patients enrolled in ${mockPrograms[0].label} at ${mockLocations[2].label}`,
     );
+  });
+
+  it('shows a failed program list once, not on every render', () => {
+    // SWR keeps returning the same error object until the request is retried.
+    const listError = new Error('Forbidden');
+    mockUseLocations.mockImplementation(() => ({ locations: [], isLoading: false, locationsError: undefined }));
+    mockUsePrograms.mockImplementation(() => ({
+      programs: [],
+      isLoading: false,
+      programsError: listError,
+    }));
+
+    const { rerender } = render(<SearchByEnrollments onSubmit={vi.fn()} />);
+    rerender(<SearchByEnrollments onSubmit={vi.fn()} />);
+
+    expect(showSnackbar).toHaveBeenCalledTimes(1);
+    expect(showSnackbar).toHaveBeenCalledWith(expect.objectContaining({ kind: 'error', subtitle: 'Forbidden' }));
   });
 });
