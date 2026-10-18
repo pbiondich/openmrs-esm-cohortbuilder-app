@@ -9,7 +9,7 @@ import { type CohortCriteriaConfig, cohortCriteriaConfig, parseCohortCriteria } 
 /**
  * Text → parseCohortCriteria → definitionUrl → readUrlRequest, the builder's own decoder: every link the
  * omnibar row offers opens in the builder as the same criteria. This replaces the cross-repo check
- * (cohort/xcheck), whose 49 phrases are below with the 39 links it ran end to end at the time.
+ * (cohort/xcheck): its 49 phrases are below, 48 with drug criteria on and one with them off.
  */
 
 const shipped = cohortCriteriaConfig(getDefaultsFromConfigSchema(configSchema) as ConfigObject);
@@ -102,7 +102,7 @@ describe('every cohort row opens in the builder as the same criteria', () => {
   });
 
   it('runs 38 of the cross-check phrases: its 39 less "patients aged 0+", which now gives no row', () => {
-    expect(xcheckPhrases).toHaveLength(49);
+    expect(xcheckPhrases).toHaveLength(48);
     expect(xcheckPhrases.filter((text) => roundTrip(text, drugsOn).url)).toHaveLength(38);
   });
 
