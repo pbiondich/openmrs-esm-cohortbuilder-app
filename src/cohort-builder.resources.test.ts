@@ -119,10 +119,31 @@ describe('getCohortMembers', () => {
       return n === 3 ? { ...details(3), person: { ...details(3).person, preferredName: null } } : details(n);
     };
 
-    const { patients, total } = await getCohortMembers(cohortUuid);
+    const { patients, total, unavailable } = await getCohortMembers(cohortUuid);
 
     expect(patients.map(({ patientId }) => patientId)).toEqual([1]);
     expect(total).toBe(3);
+    expect(unavailable).toBe(2);
     expect(fetchedPatients()).toBe(3);
+  });
+
+  it('fails when the cohort has active members but none can be shown', async () => {
+    membershipPages = [[membership(1), membership(2)]];
+    patientDetails = async () => {
+      throw new Error('Not found');
+    };
+
+    await expect(getCohortMembers(cohortUuid)).rejects.toThrow("None of the cohort's members could be loaded");
+  });
+
+  it('shows an empty cohort as no members', async () => {
+    membershipPages = [[membership(1, { voided: true })]];
+
+    expect(await getCohortMembers(cohortUuid)).toEqual({ patients: [], total: 0, unavailable: 0 });
+  });
+
+  it('refuses a cohort id that is not a uuid before fetching anything', async () => {
+    await expect(getCohortMembers('../../user')).rejects.toThrow('Not a cohort uuid');
+    expect(mockOpenmrsFetch).not.toHaveBeenCalled();
   });
 });

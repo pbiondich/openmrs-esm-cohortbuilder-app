@@ -288,6 +288,26 @@ describe('useUrlDefinition', () => {
     expect(window.location.search).toBe('');
   });
 
+  it.each([
+    ['none of them', [missingUuid], 'The saved cohort could not be loaded'],
+    ['some of them', [patientUuid, missingUuid], '{{count}} members could not be shown'],
+  ])('says so when %s can be shown', async (_, memberUuids, message) => {
+    const memberships = memberUuids.map((uuid) => ({
+      uuid,
+      patientUuid: uuid,
+      startDate: null,
+      endDate: null,
+      voided: false,
+    }));
+    const answerAsServer = mockOpenmrsFetch.getMockImplementation();
+    mockOpenmrsFetch.mockImplementation(async (url: string, init) =>
+      url.includes('/membership') ? ({ data: { results: memberships } } as never) : answerAsServer(url, init),
+    );
+    openBuilderAt(`?cohort=${cohortUuid}`);
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
   it('says when a saved cohort has more members than are shown', async () => {
     const memberships = Array.from({ length: 201 }, (_, i) => ({
       uuid: `membership-${i}`,
