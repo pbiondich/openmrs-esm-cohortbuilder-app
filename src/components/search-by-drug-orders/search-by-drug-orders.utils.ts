@@ -117,6 +117,7 @@ export const getQueryDetails = (
   }
 
   const queryDetails = composeJson(searchParams);
+  // Released reporting modules have no builtIn.drugOrderSearch, so sites can configure their own definition.
   queryDetails.query.rowFilters[0].key = drugOrderSearchDefinitionKey;
   return queryDetails;
 };
