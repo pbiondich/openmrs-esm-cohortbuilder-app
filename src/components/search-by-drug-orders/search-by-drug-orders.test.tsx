@@ -1,7 +1,8 @@
 import React from 'react';
 import { vi, describe, it, expect, type Mock } from 'vitest';
 import userEvent from '@testing-library/user-event';
-import { openmrsFetch } from '@openmrs/esm-framework';
+import { getDefaultsFromConfigSchema, openmrsFetch, useConfig } from '@openmrs/esm-framework';
+import { type ConfigObject, configSchema } from '../../config-schema';
 import { render, screen } from '@testing-library/react';
 import { useCareSettings, useDrugs } from './search-by-drug-orders.resources';
 import type * as SearchByDrugOrdersResources from './search-by-drug-orders.resources';
@@ -99,10 +100,12 @@ vi.mock('./search-by-drug-orders.resources', async (importOriginal) => {
 const mockOpenmrsFetch = openmrsFetch as Mock;
 const mockUseCareSettings = vi.mocked(useCareSettings);
 const mockUseDrugs = vi.mocked(useDrugs);
+const mockUseConfig = vi.mocked(useConfig<ConfigObject>);
 
 describe('Test the search by drug orders component', () => {
   it('should be able to select input values', async () => {
     const user = userEvent.setup();
+    mockUseConfig.mockReturnValue(getDefaultsFromConfigSchema(configSchema));
 
     mockUseCareSettings.mockImplementation(() => ({
       careSettings: mockCareSettings,

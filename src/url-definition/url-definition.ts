@@ -265,7 +265,11 @@ export function toQueryDate(value: string | undefined): string {
  * same builders as the search tabs. `names` maps program/drug uuids to display names;
  * when any is missing the description falls back to a count such as "3 drugs".
  */
-export function buildSearch(criterion: Criterion, names: Map<string, string>): Search {
+export function buildSearch(
+  criterion: Criterion,
+  names: Map<string, string>,
+  drugOrderSearchDefinitionKey: string,
+): Search {
   switch (criterion.type) {
     case 'demographics': {
       const params = {
@@ -305,7 +309,7 @@ export function buildSearch(criterion: Criterion, names: Map<string, string>): S
         activatedOnOrBefore: '',
       };
       return {
-        searchParams: drugOrders.getQueryDetails(params),
+        searchParams: drugOrders.getQueryDetails(params, drugOrderSearchDefinitionKey),
         description: drugOrders.getDescription({
           ...params,
           selectedDrugs: toDescribedValues(criterion.drugs, names, 'drug', 'drugs'),
