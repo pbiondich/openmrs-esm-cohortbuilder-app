@@ -97,7 +97,7 @@ const SearchByDrugOrder: React.FC<SearchByDrugOrderProps> = ({ onSubmit, initial
             id="careSettings"
             data-testid="careSettings"
             onChange={(data) => setSelectedCareSetting(data.selectedItem)}
-            initialSelectedItem={selectedCareSetting ?? careSettings[0]}
+            selectedItem={selectedCareSetting}
             items={careSettings}
             label={t('selectCareSettings', 'Select a care setting')}
             titleText=""
