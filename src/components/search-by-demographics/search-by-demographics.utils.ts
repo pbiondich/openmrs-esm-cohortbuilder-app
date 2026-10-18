@@ -18,7 +18,7 @@ interface Value {
   livingStatus?: string;
 }
 
-interface Demographics {
+export interface Demographics {
   gender: string;
   minAge: number;
   maxAge: number;

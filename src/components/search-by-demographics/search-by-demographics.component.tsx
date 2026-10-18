@@ -4,18 +4,23 @@ import dayjs from 'dayjs';
 import { Column, ContentSwitcher, DatePicker, DatePickerInput, NumberInput, Switch } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { type SearchByProps } from '../../types';
-import { getDescription, getQueryDetails } from './search-by-demographics.utils';
+import { type Demographics, getDescription, getQueryDetails } from './search-by-demographics.utils';
 import SearchButtonSet from '../search-button-set/search-button-set';
 import styles from './search-by-demographics.style.scss';
 
-const SearchByDemographics: React.FC<SearchByProps> = ({ onSubmit }) => {
+interface SearchByDemographicsProps extends SearchByProps {
+  /** The values to start with, such as a definition link's. */
+  initialValues?: Demographics;
+}
+
+const SearchByDemographics: React.FC<SearchByDemographicsProps> = ({ onSubmit, initialValues }) => {
   const { t } = useTranslation();
-  const [livingStatus, setLivingStatus] = useState('alive');
-  const [gender, setGender] = useState('all');
-  const [birthDayStartDate, setBirthDayStartDate] = useState('');
-  const [birthDayEndDate, setBirthDayEndDate] = useState('');
-  const [minAge, setMinAge] = useState(0);
-  const [maxAge, setMaxAge] = useState(0);
+  const [livingStatus, setLivingStatus] = useState(initialValues?.livingStatus ?? 'alive');
+  const [gender, setGender] = useState(initialValues?.gender ?? 'all');
+  const [birthDayStartDate, setBirthDayStartDate] = useState(initialValues?.birthDayStartDate ?? '');
+  const [birthDayEndDate, setBirthDayEndDate] = useState(initialValues?.birthDayEndDate ?? '');
+  const [minAge, setMinAge] = useState(initialValues?.minAge ?? 0);
+  const [maxAge, setMaxAge] = useState(initialValues?.maxAge ?? 0);
   const [isLoading, setIsLoading] = useState(false);
 
   const genders = [
@@ -77,7 +82,7 @@ const SearchByDemographics: React.FC<SearchByProps> = ({ onSubmit }) => {
         <div className={styles.genderContainer}>
           <div className={styles.switch}>
             <ContentSwitcher
-              selectedIndex={genders[0].id}
+              selectedIndex={genders.findIndex(({ value }) => value === gender)}
               className={styles.contentSwitcher}
               size="lg"
               onChange={({ index }) => setGender(genders[index].value)}
@@ -89,7 +94,7 @@ const SearchByDemographics: React.FC<SearchByProps> = ({ onSubmit }) => {
           </div>
           <div className={styles.switch}>
             <ContentSwitcher
-              selectedIndex={livingStatuses[0].id}
+              selectedIndex={livingStatuses.findIndex(({ value }) => value === livingStatus)}
               className={styles.contentSwitcher}
               size="lg"
               onChange={({ index }) => setLivingStatus(livingStatuses[index].value)}

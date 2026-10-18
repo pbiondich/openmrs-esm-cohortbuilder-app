@@ -6,6 +6,7 @@ import { CohortsPictogram, PageHeader, PageHeaderContent, showSnackbar, useLayou
 import { getCohortMembers, getDataSet, MAX_COHORT_MEMBERS_SHOWN, search } from './cohort-builder.resources';
 import { addToHistory } from './cohort-builder.utils';
 import type { Patient, SearchParams } from './types';
+import { type CohortDefinition, type Criterion, type FormValues, toFormValues } from './url-definition/url-definition';
 import { useUrlDefinition } from './url-definition/use-url-definition';
 import Composition from './components/composition/composition.component';
 import SavedCohorts from './components/saved-cohorts/saved-cohorts.component';
@@ -24,6 +25,8 @@ import styles from './cohort-builder.scss';
 interface TabItem {
   name: string;
   component: React.JSX.Element;
+  /** The tab a definition link shows when this is its first criterion's type. */
+  criterionType?: Criterion['type'];
 }
 
 const CohortBuilder: React.FC = () => {
@@ -31,6 +34,10 @@ const CohortBuilder: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isHistoryUpdated, setIsHistoryUpdated] = useState(true);
   const [cohortMemberCounts, setCohortMemberCounts] = useState<{ total: number; unavailable: number } | null>(null);
+  const [selectedTab, setSelectedTab] = useState(0);
+  // The tabs a definition link fills in start from these values. They are keyed by `link`, so each new
+  // link starts them over, while re-renders keep what the user has changed since.
+  const [prefill, setPrefill] = useState<{ link: number; values: FormValues }>({ link: 0, values: {} });
   const isLayoutTablet = useLayoutType() === 'tablet';
 
   const runSearch = (searchParams: SearchParams, queryDescription: string): Promise<boolean> => {
@@ -118,13 +125,6 @@ const CohortBuilder: React.FC = () => {
     }
   };
 
-  const urlDefinitionError = useUrlDefinition({
-    runSearch,
-    showCohort: getCohortResults,
-    showQuery: getQueryResults,
-    onHistoryChange: () => setIsHistoryUpdated(true),
-  });
-
   const tabs: TabItem[] = [
     {
       name: t('concepts', 'Concepts'),
@@ -132,7 +132,10 @@ const CohortBuilder: React.FC = () => {
     },
     {
       name: t('demographics', 'Demographics'),
-      component: <SearchByDemographics onSubmit={runSearch} />,
+      component: (
+        <SearchByDemographics key={prefill.link} onSubmit={runSearch} initialValues={prefill.values.demographics} />
+      ),
+      criterionType: 'demographics',
     },
     {
       name: t('personAttributes', 'Person Attributes'),
@@ -148,11 +151,15 @@ const CohortBuilder: React.FC = () => {
     },
     {
       name: t('enrollments', 'Enrollments'),
-      component: <SearchByEnrollments onSubmit={runSearch} />,
+      component: (
+        <SearchByEnrollments key={prefill.link} onSubmit={runSearch} initialValues={prefill.values.enrollment} />
+      ),
+      criterionType: 'enrollment',
     },
     {
       name: t('drugOrder', 'Drug Order'),
-      component: <SearchByDrugOrder onSubmit={runSearch} />,
+      component: <SearchByDrugOrder key={prefill.link} onSubmit={runSearch} initialValues={prefill.values.drugOrder} />,
+      criterionType: 'drugOrder',
     },
     {
       name: t('composition', 'Composition'),
@@ -167,6 +174,19 @@ const CohortBuilder: React.FC = () => {
       component: <SavedQueries onViewQuery={getQueryResults} />,
     },
   ];
+
+  const fillInTabs = (definition: CohortDefinition, names: Map<string, string>) => {
+    setPrefill(({ link }) => ({ link: link + 1, values: toFormValues(definition, names) }));
+    setSelectedTab(tabs.findIndex((tab) => tab.criterionType === definition.criteria[0].type));
+  };
+
+  const urlDefinitionError = useUrlDefinition({
+    runSearch,
+    showCohort: getCohortResults,
+    showQuery: getQueryResults,
+    onHistoryChange: () => setIsHistoryUpdated(true),
+    onDefinition: fillInTabs,
+  });
 
   return (
     <div>
@@ -186,7 +206,7 @@ const CohortBuilder: React.FC = () => {
           <div className={styles.tabContainer}>
             <p className={styles.heading}>{t('searchCriteria', 'Search Criteria')}</p>
             <div className={styles.tab}>
-              <Tabs>
+              <Tabs selectedIndex={selectedTab} onChange={({ selectedIndex }) => setSelectedTab(selectedIndex)}>
                 <TabList aria-label="navigation">
                   {tabs.map((tab: TabItem, index: number) => (
                     <Tab className={styles.tab} key={index}>

@@ -123,7 +123,8 @@ function openLinkWhileShown(search: string) {
   });
 }
 
-const selectedTab = () => screen.getAllByRole('tab', { selected: true }).find((tab) => !tab.closest('[role=tabpanel]'));
+const selectedTab = () =>
+  within(screen.getByRole('tablist', { name: 'navigation' })).getByRole('tab', { selected: true });
 // Only the selected tab's panel is shown; the others are hidden.
 const panel = () => within(screen.getByRole('tabpanel'));
 
@@ -212,8 +213,6 @@ describe('pre-filling the search tabs from a definition link', () => {
     await waitFor(async () =>
       expect(await selectedOptions('Select programs')).toEqual(['HIV Care and Treatment', 'TB Program']),
     );
-    expect(panel().getByLabelText('Enrolled between')).not.toHaveValue('');
-    expect(panel().getAllByLabelText('and')[0]).not.toHaveValue('');
   });
 
   it("fills in every criterion's tab and shows the first one's", async () => {
@@ -240,7 +239,7 @@ describe('pre-filling the search tabs from a definition link', () => {
     expectDemographics('All', 18, 0);
   });
 
-  it('fills in the tabs even when the link\'s search fails, so it can be fixed and run again', async () => {
+  it("fills in the tabs even when the link's search fails, so it can be fixed and run again", async () => {
     adHocQueryFails = true;
     openBuilderAt(link(women15to49));
 
@@ -258,6 +257,7 @@ describe('pre-filling the search tabs from a definition link', () => {
     expectDemographics('All', 0, 0);
   });
 
+  // Also covers the dates, which flatpickr can't show in jsdom: Carbon's locale lookup comes out undefined here.
   it.each([
     ['demographics', women15to49],
     ['enrollment', inHivCare],
