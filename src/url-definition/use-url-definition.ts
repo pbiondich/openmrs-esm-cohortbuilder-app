@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useConfig } from '@openmrs/esm-framework';
 import type { SearchParams } from '../types';
 import { type ConfigObject } from '../config-schema';
@@ -6,6 +7,7 @@ import { createCompositionQuery } from '../components/composition/composition.ut
 import { getSearchHistory } from '../components/search-history/search-history.utils';
 import {
   buildSearch,
+  LinkError,
   type CohortDefinition,
   readUrlRequest,
   type Search,
@@ -31,8 +33,9 @@ export function useUrlDefinition({
   showQuery,
   onHistoryChange,
 }: UrlDefinitionHandlers): string | null {
+  const { t } = useTranslation();
   const { drugOrderSearchDefinitionKey } = useConfig<ConfigObject>();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
   const hasRun = useRef(false);
 
   useEffect(() => {
@@ -52,15 +55,18 @@ export function useUrlDefinition({
     try {
       request = readUrlRequest(params);
     } catch (invalidUrlError) {
-      setError(invalidUrlError.message);
+      setError(invalidUrlError);
       return;
     }
 
     const handlers = { runSearch, showCohort, showQuery, onHistoryChange };
-    runRequest(request, handlers, drugOrderSearchDefinitionKey).catch((runError) => setError(runError.message));
+    runRequest(request, handlers, drugOrderSearchDefinitionKey).catch(setError);
   }, [runSearch, showCohort, showQuery, onHistoryChange, drugOrderSearchDefinitionKey]);
 
-  return error;
+  if (!error) {
+    return null;
+  }
+  return error instanceof LinkError ? t(error.key, error.defaultMessage, error.options) : error.message;
 }
 
 function removeUrlParams() {
@@ -73,12 +79,12 @@ async function runRequest(request: UrlRequest, handlers: UrlDefinitionHandlers, 
   switch (request.type) {
     case 'cohort':
       if (!(await handlers.showCohort(request.uuid))) {
-        throw new Error('The saved cohort could not be loaded');
+        throw new LinkError('linkCohortFailed', 'The saved cohort could not be loaded');
       }
       return;
     case 'query':
       if (!(await handlers.showQuery(request.uuid))) {
-        throw new Error('The saved query could not be run');
+        throw new LinkError('linkQueryFailed', 'The saved query could not be run');
       }
       return;
     case 'definition':
@@ -102,7 +108,11 @@ async function runDefinition(
 
   const runAndRecord = async ({ searchParams, description }: Search) => {
     if (!(await runSearch(searchParams, description))) {
-      throw new Error(`The search "${description}" failed, so none of this link's searches were kept`);
+      throw new LinkError(
+        'linkSearchFailed',
+        'The search "{{description}}" failed, so none of this link\'s searches were kept',
+        { description },
+      );
     }
     // runSearch appends to the history just before it resolves, so the newest entry is this one.
     addedEntries.push(getSearchHistory().length);
