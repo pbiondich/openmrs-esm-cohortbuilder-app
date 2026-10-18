@@ -30,14 +30,13 @@ const CohortBuilder: React.FC = () => {
   const { t } = useTranslation();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isHistoryUpdated, setIsHistoryUpdated] = useState(true);
-  // Set when a saved cohort has more members than are shown.
-  const [cohortSize, setCohortSize] = useState<number | null>(null);
+  const [truncatedCohortSize, setTruncatedCohortSize] = useState<number | null>(null);
   const isLayoutTablet = useLayoutType() === 'tablet';
 
   const runSearch = (searchParams: SearchParams, queryDescription: string): Promise<boolean> => {
     return new Promise((resolve) => {
       setPatients([]);
-      setCohortSize(null);
+      setTruncatedCohortSize(null);
       search(searchParams)
         .then(({ data: { rows } }) => {
           rows.map((patient: Patient) => {
@@ -73,7 +72,7 @@ const CohortBuilder: React.FC = () => {
     try {
       const patients = await getDataSet(queryId);
       setPatients(patients);
-      setCohortSize(null);
+      setTruncatedCohortSize(null);
       showSnackbar({
         title: t('searchCompleted', 'Search completed'),
         kind: 'success',
@@ -98,7 +97,7 @@ const CohortBuilder: React.FC = () => {
     try {
       const { patients, total } = await getCohortMembers(cohortId);
       setPatients(patients);
-      setCohortSize(total > MAX_COHORT_MEMBERS_SHOWN ? total : null);
+      setTruncatedCohortSize(total > MAX_COHORT_MEMBERS_SHOWN ? total : null);
       showSnackbar({
         title: t('searchCompleted', 'Search completed'),
         kind: 'success',
@@ -203,14 +202,14 @@ const CohortBuilder: React.FC = () => {
               </Tabs>
             </div>
           </div>
-          {cohortSize !== null && (
+          {truncatedCohortSize !== null && (
             <InlineNotification
               kind="info"
               lowContrast
               hideCloseButton
               title={t('cohortMembersLimited', 'Showing the first {{shown}} of {{total}} members', {
                 shown: MAX_COHORT_MEMBERS_SHOWN,
-                total: cohortSize,
+                total: truncatedCohortSize,
               })}
             />
           )}
