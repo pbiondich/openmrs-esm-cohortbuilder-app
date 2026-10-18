@@ -100,7 +100,7 @@ Config, in `@openmrs/esm-cohort-builder-app`:
 | Key | Default | What it does |
 | --- | --- | --- |
 | `omnibar.enabled` | `true` | Off, every row stays empty and nothing is fetched. Removing the extensions with `"omnibar-providers-slot": {"remove": [...]}` works too |
-| `omnibar.savedSearchMinCharacters` | `2` | Characters needed before saved cohorts and queries are searched |
+| `omnibar.savedSearchMinCharacters` | `2` | Characters needed before saved cohorts and queries are searched. At least 1: a lower value is refused and treated as 1 |
 | `omnibar.programs` | The RefApp demo programs | Programs the cohort row understands, with aliases ("enrolled in HIV") |
 | `omnibar.drugGroups` | ARVs (demo formulary), TLD (none on the demo) | Drug groups the cohort row understands ("on ARVs"), as Drug uuids |
 | `drugCriteriaEnabled` | `false` | Whether the server can run drug order searches (see above). Off, "on ARVs" gives no row |

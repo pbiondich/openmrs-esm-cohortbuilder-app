@@ -99,7 +99,9 @@ export const configSchema = {
     savedSearchMinCharacters: {
       _type: Type.Number,
       _default: 2,
-      _description: 'Characters needed before saved cohorts and saved queries are searched by name.',
+      _description:
+        'Characters needed before saved cohorts and saved queries are searched by name: at least 1, so an empty ' +
+        'query is never searched.',
       _validators: [validator((value: number) => value >= 1, 'Must be at least 1.')],
     },
     programs: {
