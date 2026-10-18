@@ -25,6 +25,7 @@ describe('config schema', () => {
       expect.any(String),
     ]);
     expect([1, 2, 10].map((value) => atLeastOne(value))).toEqual([undefined, undefined, undefined]);
+    expect(configSchema.omnibar.savedSearchMinCharacters._description).toContain('at least 1');
   });
 
   it('ships the demo programs and drug groups the cohort parser understands', () => {
