@@ -24,10 +24,12 @@ describe(`the omnibar contract copied from omnibar ${vendoredFrom.slice(0, 7)}`,
   it('has exactly the files of that commit, byte for byte', () => {
     expect(readdirSync(folder).sort()).toEqual(Object.keys(sha256ByFile).sort());
     for (const [file, sha256] of Object.entries(sha256ByFile)) {
-      expect([file, createHash('sha256').update(readFileSync(join(folder, file))).digest('hex')]).toEqual([
+      expect([
         file,
-        sha256,
-      ]);
+        createHash('sha256')
+          .update(new Uint8Array(readFileSync(join(folder, file))))
+          .digest('hex'),
+      ]).toEqual([file, sha256]);
     }
   });
 
