@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildSearch,
   decodeDefinition,
+  encodeDefinition,
   isUuid,
   MAX_DEFINITION_BYTES,
   readUrlRequest,
   toQueryDate,
   validateDefinition,
+  type CohortDefinition,
 } from './url-definition';
 
 const programUuid = '64f950e6-1b07-4ac0-8e7e-f3e148f3463f';
@@ -185,6 +187,58 @@ describe('decodeDefinition', () => {
       expect(padded.length).toBeLessThan(MAX_DEFINITION_BYTES);
       expect(() => decodeDefinition(Buffer.from(padded).toString('base64url'))).toThrow('larger than');
     });
+  });
+});
+
+describe('encodeDefinition', () => {
+  it('writes unpadded base64url of the UTF-8 JSON, which decodes back to the same definition', () => {
+    const encoded = encodeDefinition(validDefinition as CohortDefinition);
+    expect(encoded).toBe(encode(validDefinition));
+    expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(decodeDefinition(encoded)).toEqual(validDefinition);
+  });
+
+  it('keeps text outside Latin-1 intact', () => {
+    const definition: CohortDefinition = {
+      v: 1,
+      label: 'Femmes âgées 15–49 · 女性 🩺',
+      criteria: [{ type: 'demographics', gender: 'female' }],
+    };
+    expect(decodeDefinition(encodeDefinition(definition)).label).toBe(definition.label);
+  });
+
+  it('uses the URL alphabet', () => {
+    // A label of "?>?" puts "Pz4/" in standard base64 and "Pz4_" in base64url.
+    const definition: CohortDefinition = { v: 1, label: '??>?', criteria: [{ type: 'demographics', minAge: 1 }] };
+    expect(Buffer.from(JSON.stringify(definition)).toString('base64')).toMatch(/[+/]/);
+    expect(encodeDefinition(definition)).toBe(encode(definition));
+  });
+
+  it.each<[string, CohortDefinition]>([
+    ['no criteria', { v: 1, criteria: [] }],
+    ['maxAge 0', { v: 1, criteria: [{ type: 'demographics', maxAge: 0 }] }],
+    ['an empty demographics criterion', { v: 1, criteria: [{ type: 'demographics', gender: 'any' }] }],
+    ['a program that is not a uuid', { v: 1, criteria: [{ type: 'enrollment', programs: ['../session'] }] }],
+    [
+      'a label over 200 characters',
+      { v: 1, label: 'x'.repeat(201), criteria: validDefinition.criteria as CohortDefinition['criteria'] },
+    ],
+    [
+      `more than ${MAX_DEFINITION_BYTES} bytes`,
+      {
+        v: 1,
+        criteria: Array.from({ length: 5 }, (_, i) => ({
+          type: 'drugOrder' as const,
+          drugs: Array.from(
+            { length: 50 },
+            (_, j) => `${String(i * 50 + j).padStart(8, '0')}-0000-4000-8000-000000000000`,
+          ),
+        })),
+      },
+    ],
+  ])('makes no link the builder would reject: %s', (_, definition) => {
+    expect(() => validateDefinition(definition) && decodeDefinition(encode(definition))).toThrow();
+    expect(encodeDefinition(definition)).toBeNull();
   });
 });
 
