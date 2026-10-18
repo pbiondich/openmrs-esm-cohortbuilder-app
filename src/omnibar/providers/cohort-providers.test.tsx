@@ -28,7 +28,9 @@ vi.mock('react-i18next', async () => {
   const { default: i18next } = await import('i18next');
   const i18n = i18next.createInstance();
   await i18n.init({ lng: 'en', resources: { en: { translation: {} } } });
-  return { useTranslation: () => ({ t: i18n.t.bind(i18n) }) };
+  // Stable, as react-i18next's own t is.
+  const t = i18n.t.bind(i18n);
+  return { useTranslation: () => ({ t }) };
 });
 
 const mockUseConfig = vi.mocked(useConfig<ConfigObject>);
@@ -107,7 +109,7 @@ describe('cohort providers in routes.json', () => {
   ])(
     'declares %s for global scope only, on contract 1, with the privileges its backend checks',
     (name, component, order, privileges) => {
-      const extension = routes.extensions.find((e) => e.name === name);
+      const extension: Record<string, unknown> = routes.extensions.find((e) => e.name === name);
       expect(extension).toMatchObject({ component, slot: 'omnibar-providers-slot', privileges });
       expect(extension.meta).toEqual({ lane: 'navigate', scopes: ['global'], order, contract: 1 });
       expect(extension).not.toHaveProperty('offline');
@@ -140,7 +142,9 @@ describe('every cohort provider', () => {
     'the %s row stays idle and fetches nothing while the omnibar rows are turned off',
     async (_, Provider) => {
       vi.useFakeTimers();
-      onTestFinished(() => vi.useRealTimers());
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
       useTestConfig((config) => ({ ...config, omnibar: { ...config.omnibar, enabled: false } }));
       const { last, rerender } = renderProvider(Provider, 'women aged 15-49 on ARVs');
       expect(last()).toMatchObject({ status: 'idle' });
