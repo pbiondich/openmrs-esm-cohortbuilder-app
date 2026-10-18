@@ -61,17 +61,61 @@ export const getDataSet = async (queryID: string) => {
   return dataset;
 };
 
+interface CohortMembership {
+  patientUuid: string;
+  endDate: string | null;
+  voided: boolean;
+}
+
+interface CohortMembershipPage {
+  results: CohortMembership[];
+  links?: Array<{ rel: string }>;
+}
+
+interface CohortMemberDetails {
+  patientId: number;
+  person: { gender: string; age: number; preferredName: { givenName: string; familyName: string } };
+}
+
+const MEMBERSHIP_PAGE_SIZE = 100;
+
+/**
+ * webservices.rest has no cohort members endpoint, only the paged `cohort/{uuid}/membership`
+ * subresource, which gives patient uuids. Each active member is then loaded for the results table.
+ */
 export const getCohortMembers = async (cohortId: string) => {
-  const results: FetchResponse<SearchResults> = await openmrsFetch(`${restBaseUrl}/cohort/${cohortId}/member?v=full`, {
-    method: 'GET',
-  });
+  const memberships: CohortMembership[] = [];
+  let hasNextPage = true;
+  while (hasNextPage) {
+    const { data }: FetchResponse<CohortMembershipPage> = await openmrsFetch(
+      `${restBaseUrl}/cohort/${cohortId}/membership?v=custom:(patientUuid,endDate,voided)&limit=${MEMBERSHIP_PAGE_SIZE}&startIndex=${memberships.length}`,
+    );
+    memberships.push(...data.results);
+    hasNextPage = data.results.length > 0 && Boolean(data.links?.some((link) => link.rel === 'next'));
+  }
 
-  const dataset = results.data.rows.map((patient: Patient) => {
-    patient.id = patient.patientId.toString();
-    patient.name = `${patient.firstname} ${patient.lastname}`;
+  const now = new Date();
+  const activeMembers = memberships.filter(
+    (membership) => !membership.voided && (!membership.endDate || new Date(membership.endDate) > now),
+  );
 
-    return patient;
-  });
-
-  return dataset;
+  return Promise.all(
+    activeMembers.map(async ({ patientUuid }): Promise<Patient> => {
+      const {
+        data: { patientId, person },
+      }: FetchResponse<CohortMemberDetails> = await openmrsFetch(
+        `${restBaseUrl}/patient/${patientUuid}?v=custom:(patientId,person:(gender,age,preferredName:(givenName,familyName)))`,
+      );
+      const { givenName, familyName } = person.preferredName;
+      return {
+        id: patientId.toString(),
+        patientId,
+        name: `${givenName} ${familyName}`,
+        firstname: givenName,
+        lastname: familyName,
+        age: person.age,
+        gender: person.gender,
+      };
+    }),
+  );
 };
