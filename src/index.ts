@@ -39,7 +39,7 @@ export const saveCohortModal = getSyncLifecycle(saveCohortModalComponent, option
 
 export const saveQueryModal = getSyncLifecycle(saveQueryModalComponent, options);
 
-// Omnibar providers. Async, so an omnibar loads only the provider's own chunk, never the builder page.
+// Omnibar providers. Async, so each provider's code is a chunk of its own, loaded only when an omnibar mounts it.
 const bounded =
   (name: string) =>
   ({ default: Provider }) => ({ default: withProviderBoundary(Provider, name) });
