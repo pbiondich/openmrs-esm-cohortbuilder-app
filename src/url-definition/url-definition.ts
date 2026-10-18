@@ -102,10 +102,11 @@ export function decodeDefinition(encoded: string): CohortDefinition {
 }
 
 function decodeBase64Url(encoded: string): string {
-  if (!BASE64URL_PATTERN.test(encoded)) {
+  const unpadded = encoded.replace(/={1,2}$/, '');
+  if (!BASE64URL_PATTERN.test(unpadded)) {
     throw new Error('Definition is not valid base64url');
   }
-  const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+  const base64 = unpadded.replace(/-/g, '+').replace(/_/g, '/');
 
   let binary: string;
   try {
