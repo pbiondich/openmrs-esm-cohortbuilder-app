@@ -1,7 +1,7 @@
 import React from 'react';
 import { createRequire } from 'node:module';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import dayjs from 'dayjs';
 import { getDefaultsFromConfigSchema, openmrsFetch, useConfig } from '@openmrs/esm-framework';
@@ -230,6 +230,22 @@ describe('date pickers', () => {
     await waitFor(() => expect(dateInputs().map((input) => input.value)).toEqual(['31-12-2024', '01-01-2025']), {
       timeout: 1000,
     });
+    const [{ query }] = await search(onSubmit);
+    expect(query.rowFilters.find(({ key }) => key.endsWith('bornDuringPeriod')).parameterValues).toEqual({
+      startDate: dayjs(new Date(2024, 11, 31)).format(),
+      endDate: dayjs(new Date(2025, 0, 1)).format(),
+    });
+  });
+
+  it('takes a typed date when a touch outside closes the calendar', async () => {
+    const onSubmit = vi.fn();
+    render(<SearchByDemographics onSubmit={onSubmit} />);
+
+    await type(dateInputs()[0], '31-12-2024');
+    fireEvent.touchStart(document.body);
+    await type(dateInputs()[1], '01-01-2025');
+    fireEvent.touchStart(document.body);
+
     const [{ query }] = await search(onSubmit);
     expect(query.rowFilters.find(({ key }) => key.endsWith('bornDuringPeriod')).parameterValues).toEqual({
       startDate: dayjs(new Date(2024, 11, 31)).format(),
