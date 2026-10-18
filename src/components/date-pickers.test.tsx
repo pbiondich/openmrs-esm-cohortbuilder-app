@@ -238,6 +238,28 @@ describe('date pickers', () => {
     expect(dateInputs().map((input) => input.value)).toEqual(typed.slice(0, dateInputs().length));
   });
 
+  it.each([
+    ['1-02-2024', new Date(2024, 1, 1)],
+    ['01-2-2024', new Date(2024, 1, 1)],
+    ['1-2-2024', new Date(2024, 1, 1)],
+    ['2-1-2024', new Date(2024, 0, 2)],
+    ['31-02-2024', null],
+    ['29-02-2023', null],
+    ['2024-12-31', null],
+    ['1-13-2024', null],
+  ])('reads a typed %s strictly as day-month-year', async (text, date) => {
+    const onSubmit = vi.fn();
+    render(<SearchByDemographics onSubmit={onSubmit} />);
+
+    await type(dateInputs()[0], text);
+    const [{ query }] = await search(onSubmit);
+
+    expect(dateInputs()[0]).toHaveValue(date ? dayjs(date).format('DD-MM-YYYY') : '');
+    expect(query.rowFilters.find(({ key }) => key.endsWith('bornDuringPeriod'))?.parameterValues).toEqual(
+      date ? { startDate: dayjs(date).format() } : undefined,
+    );
+  });
+
   it('takes a typed date when Enter is pressed', async () => {
     const onSubmit = vi.fn();
     render(<SearchByDemographics onSubmit={onSubmit} />);
