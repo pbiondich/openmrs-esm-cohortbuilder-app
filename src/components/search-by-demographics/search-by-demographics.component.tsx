@@ -138,6 +138,7 @@ const SearchByDemographics: React.FC<SearchByDemographicsProps> = ({ onSubmit, i
       <div className={styles.column}>
         <Column>
           <DatePicker
+            dateFormat="d-m-Y"
             datePickerType="single"
             allowInput={false}
             onChange={(date) => setBirthDayStartDate(dayjs(date[0]).format())}
@@ -153,6 +154,7 @@ const SearchByDemographics: React.FC<SearchByDemographicsProps> = ({ onSubmit, i
         </Column>
         <Column>
           <DatePicker
+            dateFormat="d-m-Y"
             allowInput={false}
             datePickerType="single"
             onChange={(date) => setBirthDayEndDate(dayjs(date[0]).format())}
