@@ -407,13 +407,13 @@ describe('buildSearch', () => {
     );
   });
 
-  it('falls back to a count when a name is missing', () => {
+  it('counts the programs and drugs whose names are missing', () => {
     const search = buildSearch(
       { type: 'enrollment', programs: [programUuid, cielStyleUuid] },
       names,
       drugOrderSearchKey,
     );
-    expect(search.description).toBe('Patients enrolled in 2 programs');
+    expect(search.description).toBe('Patients enrolled in HIV Program, 1 more program');
     expect(search.searchParams.query.rowFilters[0].parameterValues).toEqual({
       programs: [programUuid, cielStyleUuid],
     });
@@ -421,6 +421,13 @@ describe('buildSearch', () => {
     expect(buildSearch({ type: 'drugOrder', drugs: [drugUuid] }, new Map(), drugOrderSearchKey).description).toBe(
       'Patients who taking 1 drug',
     );
+    expect(
+      buildSearch(
+        { type: 'drugOrder', drugs: [drugUuid, cielStyleUuid, '5089AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'] },
+        names,
+        drugOrderSearchKey,
+      ).description,
+    ).toBe('Patients who taking Triomune-30 and 2 more drugs');
   });
 
   it('describes drug orders with drug names and dates', () => {
