@@ -3,7 +3,7 @@ import classNames from 'classnames';
 import { InlineNotification, Tab, Tabs, TabPanels, TabPanel, TabList } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { CohortsPictogram, PageHeader, PageHeaderContent, showSnackbar, useLayoutType } from '@openmrs/esm-framework';
-import { getCohortMembers, getDataSet, search } from './cohort-builder.resources';
+import { getCohortMembers, getDataSet, MAX_COHORT_MEMBERS_SHOWN, search } from './cohort-builder.resources';
 import { addToHistory } from './cohort-builder.utils';
 import type { Patient, SearchParams } from './types';
 import { useUrlDefinition } from './url-definition/use-url-definition';
@@ -30,11 +30,14 @@ const CohortBuilder: React.FC = () => {
   const { t } = useTranslation();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isHistoryUpdated, setIsHistoryUpdated] = useState(true);
+  // Set when a saved cohort has more members than are shown.
+  const [cohortSize, setCohortSize] = useState<number | null>(null);
   const isLayoutTablet = useLayoutType() === 'tablet';
 
   const runSearch = (searchParams: SearchParams, queryDescription: string): Promise<boolean> => {
     return new Promise((resolve) => {
       setPatients([]);
+      setCohortSize(null);
       search(searchParams)
         .then(({ data: { rows } }) => {
           rows.map((patient: Patient) => {
@@ -70,6 +73,7 @@ const CohortBuilder: React.FC = () => {
     try {
       const patients = await getDataSet(queryId);
       setPatients(patients);
+      setCohortSize(null);
       showSnackbar({
         title: t('searchCompleted', 'Search completed'),
         kind: 'success',
@@ -90,8 +94,9 @@ const CohortBuilder: React.FC = () => {
 
   const getCohortResults = async (cohortId: string) => {
     try {
-      const patients = await getCohortMembers(cohortId);
+      const { patients, total } = await getCohortMembers(cohortId);
       setPatients(patients);
+      setCohortSize(total > MAX_COHORT_MEMBERS_SHOWN ? total : null);
       showSnackbar({
         title: t('searchCompleted', 'Search completed'),
         kind: 'success',
@@ -194,6 +199,17 @@ const CohortBuilder: React.FC = () => {
               </Tabs>
             </div>
           </div>
+          {cohortSize !== null && (
+            <InlineNotification
+              kind="info"
+              lowContrast
+              hideCloseButton
+              title={t('cohortMembersLimited', 'Showing the first {{shown}} of {{total}} members', {
+                shown: MAX_COHORT_MEMBERS_SHOWN,
+                total: cohortSize,
+              })}
+            />
+          )}
           <SearchResultsTable patients={patients} />
           <SearchHistory isHistoryUpdated={isHistoryUpdated} setIsHistoryUpdated={setIsHistoryUpdated} />
         </div>
