@@ -1,6 +1,9 @@
+import { createElement, type ReactNode } from 'react';
+import { SWRConfig } from 'swr';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
 import { openmrsFetch } from '@openmrs/esm-framework';
-import { getCohortMembers, MAX_COHORT_MEMBERS_SHOWN } from './cohort-builder.resources';
+import { getCohortMembers, MAX_COHORT_MEMBERS_SHOWN, useLocations } from './cohort-builder.resources';
 
 const mockOpenmrsFetch = vi.mocked(openmrsFetch);
 const cohortUuid = 'f4c0b5a2-3c84-4c76-bb7e-6c1b1b2e5a11';
@@ -145,5 +148,20 @@ describe('getCohortMembers', () => {
   it('refuses a cohort id that is not a uuid before fetching anything', async () => {
     await expect(getCohortMembers('../../user')).rejects.toThrow('Not a cohort uuid');
     expect(mockOpenmrsFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('useLocations', () => {
+  it('asks only for each location uuid and display', async () => {
+    const location = { uuid: '44c3efb0-2583-4c80-a79e-1f756a03c0a1', display: 'Outpatient Clinic' };
+    mockOpenmrsFetch.mockResolvedValue({ data: { results: [location] } } as never);
+    const freshCache = ({ children }: { children: ReactNode }) =>
+      createElement(SWRConfig, { value: { provider: () => new Map() } }, children);
+
+    const { result } = renderHook(() => useLocations(), { wrapper: freshCache });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(mockOpenmrsFetch.mock.calls.map(([url]) => url)).toEqual(['/ws/rest/v1/location?v=custom:(uuid,display)']);
+    expect(result.current.locations).toEqual([{ id: 0, label: 'Outpatient Clinic', value: location.uuid }]);
   });
 });
