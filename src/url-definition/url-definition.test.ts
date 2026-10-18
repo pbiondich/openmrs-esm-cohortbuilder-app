@@ -191,7 +191,7 @@ describe('validateDefinition', () => {
       v: 1,
       criteria: [
         { type: 'demographics', gender: 'male' },
-        { type: 'demographics', gender: 'any', maxAge: 0 },
+        { type: 'demographics', gender: 'any', minAge: 0, maxAge: 1 },
         {
           type: 'enrollment',
           programs: [cielStyleUuid],
@@ -259,6 +259,8 @@ describe('validateDefinition', () => {
     ['a fractional age', { type: 'demographics', minAge: 1.5 }, '"minAge" must be a whole number from 0 to 150'],
     ['a negative age', { type: 'demographics', minAge: -1 }, '"minAge" must be a whole number'],
     ['an age over 150', { type: 'demographics', maxAge: 151 }, '"maxAge" must be a whole number'],
+    ['maxAge 0', { type: 'demographics', maxAge: 0 }, '"maxAge" must be a whole number from 1 to 150'],
+    ['minAge and maxAge 0', { type: 'demographics', minAge: 0, maxAge: 0 }, '"maxAge" must be a whole number from 1'],
     ['an age as text', { type: 'demographics', minAge: '15' }, '"minAge" must be a whole number'],
     ['a null age', { type: 'demographics', gender: 'male', maxAge: null }, '"maxAge" must be a whole number'],
     [
