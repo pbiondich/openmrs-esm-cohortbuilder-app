@@ -55,6 +55,8 @@ const SearchByDemographics: React.FC<SearchByDemographicsProps> = ({ onSubmit, i
   ];
 
   const reset = () => {
+    setGender('all');
+    setLivingStatus('alive');
     setMaxAge(0);
     setMinAge(0);
     setBirthDayEndDate('');
