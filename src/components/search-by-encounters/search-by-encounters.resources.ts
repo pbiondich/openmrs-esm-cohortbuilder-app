@@ -8,7 +8,7 @@ import type { DropdownValue, Response } from '../../types';
 export const useForms = () => {
   const { data, error } = useSWRImmutable<{
     data: { results: Response[] };
-  }>(`${restBaseUrl}/form`, openmrsFetch);
+  }>(`${restBaseUrl}/form?v=custom:(uuid,display)`, openmrsFetch);
 
   const forms: DropdownValue[] = [];
   data?.data.results.map((form: Response, index: number) => {
@@ -32,7 +32,7 @@ export const useForms = () => {
 export const useEncounterTypes = () => {
   const { data, error } = useSWRImmutable<{
     data: { results: Response[] };
-  }>(`${restBaseUrl}/encountertype`, openmrsFetch);
+  }>(`${restBaseUrl}/encountertype?v=custom:(uuid,display)`, openmrsFetch);
 
   const encounterTypes: DropdownValue[] = [];
   data?.data.results.map((encounterType: Response, index: number) => {

@@ -29,7 +29,7 @@ export const search = async (searchParams: SearchParams) => {
 export const useLocations = () => {
   const { data, error } = useSWRImmutable<{
     data: { results: Response[] };
-  }>(`${restBaseUrl}/location`, openmrsFetch);
+  }>(`${restBaseUrl}/location?v=custom:(uuid,display)`, openmrsFetch);
 
   const locations: DropdownValue[] = [];
   data?.data.results.map((location: Response, index: number) => {
