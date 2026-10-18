@@ -82,6 +82,7 @@ const CohortBuilder: React.FC = () => {
           count: patients.length,
         }),
       });
+      return true;
     } catch (error) {
       showSnackbar({
         title: t('error', 'Error'),
@@ -89,6 +90,7 @@ const CohortBuilder: React.FC = () => {
         isLowContrast: false,
         subtitle: error?.message,
       });
+      return false;
     }
   };
 
@@ -105,6 +107,7 @@ const CohortBuilder: React.FC = () => {
           count: patients.length,
         }),
       });
+      return true;
     } catch (error) {
       showSnackbar({
         title: t('error', 'Error'),
@@ -112,6 +115,7 @@ const CohortBuilder: React.FC = () => {
         isLowContrast: false,
         subtitle: error?.message,
       });
+      return false;
     }
   };
 
