@@ -107,6 +107,16 @@ describe('decodeDefinition', () => {
     expect(decodeDefinition(`${encoded}=`).criteria).toEqual([{ type: 'demographics', gender: 'female' }]);
   });
 
+  it('gives a translation key, default text and values for each rejection', () => {
+    expect(() => decodeDefinition('A'.repeat(1_000_000))).toThrow(
+      expect.objectContaining({
+        key: 'definitionTooLarge',
+        defaultMessage: 'Definition is larger than {{maxBytes}} bytes',
+        options: { maxBytes: MAX_DEFINITION_BYTES },
+      }),
+    );
+  });
+
   it('decodes UTF-8 labels', () => {
     const definition = { v: 1, label: 'Wagonjwa wa kike – ናሙና 🙂', criteria: [{ type: 'demographics', minAge: 1 }] };
     expect(decodeDefinition(encode(definition)).label).toBe(definition.label);

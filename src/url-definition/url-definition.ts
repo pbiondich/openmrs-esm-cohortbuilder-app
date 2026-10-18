@@ -62,8 +62,22 @@ export interface Search {
 }
 
 /**
+ * Why a link could not be opened. `key`, `defaultMessage` and `options` are passed to t();
+ * `message` is the English text.
+ */
+export class LinkError extends Error {
+  constructor(
+    readonly key: string,
+    readonly defaultMessage: string,
+    readonly options: Record<string, string | number> = {},
+  ) {
+    super(defaultMessage.replace(/{{(\w+)}}/g, (_, name) => String(options[name])));
+  }
+}
+
+/**
  * Reads the single request the URL asks for (definition > cohort > query).
- * Returns null when none is present and throws an Error with a readable message when it is invalid.
+ * Returns null when none is present and throws a LinkError when it is invalid.
  */
 export function readUrlRequest(params: URLSearchParams): UrlRequest | null {
   const [chosen, ...ignored] = URL_PARAMS.filter((name) => params.has(name));
@@ -78,7 +92,7 @@ export function readUrlRequest(params: URLSearchParams): UrlRequest | null {
     case 'cohort':
     case 'query':
       if (!isUuid(value)) {
-        throw new Error(`"${chosen}" must be a uuid`);
+        throw new LinkError('linkParamNotUuid', '"{{param}}" must be a uuid', { param: chosen });
       }
       return { type: chosen, uuid: value };
     default:
@@ -88,7 +102,7 @@ export function readUrlRequest(params: URLSearchParams): UrlRequest | null {
 
 export function decodeDefinition(encoded: string): CohortDefinition {
   if (encoded.length > MAX_ENCODED_LENGTH) {
-    throw new Error(`Definition is larger than ${MAX_DEFINITION_BYTES} bytes`);
+    throw definitionTooLarge();
   }
   const json = decodeBase64Url(encoded);
 
@@ -96,7 +110,7 @@ export function decodeDefinition(encoded: string): CohortDefinition {
   try {
     definition = JSON.parse(json);
   } catch {
-    throw new Error('Definition is not valid JSON');
+    throw new LinkError('definitionNotJson', 'Definition is not valid JSON');
   }
   return validateDefinition(definition);
 }
@@ -104,7 +118,7 @@ export function decodeDefinition(encoded: string): CohortDefinition {
 function decodeBase64Url(encoded: string): string {
   const unpadded = encoded.replace(/={1,2}$/, '');
   if (!BASE64URL_PATTERN.test(unpadded)) {
-    throw new Error('Definition is not valid base64url');
+    throw notBase64Url();
   }
   const base64 = unpadded.replace(/-/g, '+').replace(/_/g, '/');
 
@@ -112,38 +126,54 @@ function decodeBase64Url(encoded: string): string {
   try {
     binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='));
   } catch {
-    throw new Error('Definition is not valid base64url');
+    throw notBase64Url();
   }
   if (binary.length > MAX_DEFINITION_BYTES) {
-    throw new Error(`Definition is larger than ${MAX_DEFINITION_BYTES} bytes`);
+    throw definitionTooLarge();
   }
 
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
-    throw new Error('Definition is not valid UTF-8');
+    throw new LinkError('definitionNotUtf8', 'Definition is not valid UTF-8');
   }
 }
 
+const definitionTooLarge = () =>
+  new LinkError('definitionTooLarge', 'Definition is larger than {{maxBytes}} bytes', {
+    maxBytes: MAX_DEFINITION_BYTES,
+  });
+
+const notBase64Url = () => new LinkError('definitionNotBase64Url', 'Definition is not valid base64url');
+
 export function validateDefinition(value: unknown): CohortDefinition {
-  const definition = expectObject(value, 'Definition', ['v', 'label', 'criteria']);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new LinkError('definitionNotObject', 'Definition must be a JSON object');
+  }
+  const unknownKey = findUnknownKey(value, ['v', 'label', 'criteria']);
+  if (unknownKey !== undefined) {
+    throw new LinkError('definitionUnknownKey', 'Definition has an unknown key "{{key}}"', { key: unknownKey });
+  }
+  const definition = value as Record<string, unknown>;
 
   if (definition.v !== 1) {
-    throw new Error('Definition version "v" must be 1');
+    throw new LinkError('definitionVersion', 'Definition version "v" must be 1');
   }
   if (
     definition.label !== undefined &&
     (typeof definition.label !== 'string' || definition.label.length > MAX_LABEL_LENGTH)
   ) {
-    throw new Error(`"label" must be text of at most ${MAX_LABEL_LENGTH} characters`);
+    throw new LinkError('definitionLabel', '"label" must be text of at most {{max}} characters', {
+      max: MAX_LABEL_LENGTH,
+    });
   }
   if (
     !Array.isArray(definition.criteria) ||
     definition.criteria.length < 1 ||
     definition.criteria.length > MAX_CRITERIA
   ) {
-    throw new Error(`"criteria" must list 1 to ${MAX_CRITERIA} criteria`);
+    throw new LinkError('definitionCriteria', '"criteria" must list 1 to {{max}} criteria', { max: MAX_CRITERIA });
   }
 
   return {
@@ -154,33 +184,44 @@ export function validateDefinition(value: unknown): CohortDefinition {
 }
 
 function validateCriterion(value: unknown, index: number): Criterion {
-  const name = `Criterion ${index + 1}`;
+  const number = index + 1;
   const type = (value as { type?: unknown })?.type;
 
   switch (type) {
     case 'demographics': {
-      const criterion = expectObject(value, name, ['type', 'gender', 'minAge', 'maxAge']);
+      const criterion = expectCriterionObject(value, number, ['type', 'gender', 'minAge', 'maxAge']);
       const { gender = 'any', minAge, maxAge } = criterion;
       if (gender !== 'male' && gender !== 'female' && gender !== 'any') {
-        throw new Error(`${name}: "gender" must be "male", "female" or "any"`);
+        throw new LinkError('criterionGender', 'Criterion {{number}}: "gender" must be "male", "female" or "any"', {
+          number,
+        });
       }
-      expectOptionalAge(minAge, `${name}: "minAge"`, 0);
+      expectOptionalAge(minAge, number, 'minAge', 0);
       // The demographics builder treats an age of 0 as "no bound", which would turn maxAge 0 into "any age".
-      expectOptionalAge(maxAge, `${name}: "maxAge"`, 1);
+      expectOptionalAge(maxAge, number, 'maxAge', 1);
       if (minAge !== undefined && maxAge !== undefined && minAge > maxAge) {
-        throw new Error(`${name}: "minAge" must not be greater than "maxAge"`);
+        throw new LinkError('criterionAgeOrder', 'Criterion {{number}}: "minAge" must not be greater than "maxAge"', {
+          number,
+        });
       }
       if (gender === 'any' && minAge === undefined && maxAge === undefined) {
-        throw new Error(`${name}: give a gender, "minAge" or "maxAge"`);
+        throw new LinkError('criterionDemographicsEmpty', 'Criterion {{number}}: give a gender, "minAge" or "maxAge"', {
+          number,
+        });
       }
       return { type, gender, minAge: minAge as number | undefined, maxAge: maxAge as number | undefined };
     }
     case 'enrollment': {
-      const criterion = expectObject(value, name, ['type', 'programs', 'enrolledOnOrAfter', 'enrolledOnOrBefore']);
+      const criterion = expectCriterionObject(value, number, [
+        'type',
+        'programs',
+        'enrolledOnOrAfter',
+        'enrolledOnOrBefore',
+      ]);
       const { programs, enrolledOnOrAfter, enrolledOnOrBefore } = criterion;
-      expectUuids(programs, `${name}: "programs"`, MAX_PROGRAMS);
-      expectOptionalDate(enrolledOnOrAfter, `${name}: "enrolledOnOrAfter"`, false);
-      expectOptionalDate(enrolledOnOrBefore, `${name}: "enrolledOnOrBefore"`, false);
+      expectUuids(programs, number, 'programs', MAX_PROGRAMS);
+      expectOptionalDate(enrolledOnOrAfter, number, 'enrolledOnOrAfter', false);
+      expectOptionalDate(enrolledOnOrBefore, number, 'enrolledOnOrBefore', false);
       return {
         type,
         programs: programs as string[],
@@ -189,11 +230,11 @@ function validateCriterion(value: unknown, index: number): Criterion {
       };
     }
     case 'drugOrder': {
-      const criterion = expectObject(value, name, ['type', 'drugs', 'activeOnOrAfter', 'activeOnOrBefore']);
+      const criterion = expectCriterionObject(value, number, ['type', 'drugs', 'activeOnOrAfter', 'activeOnOrBefore']);
       const { drugs, activeOnOrAfter, activeOnOrBefore } = criterion;
-      expectUuids(drugs, `${name}: "drugs"`, MAX_DRUGS);
-      expectOptionalDate(activeOnOrAfter, `${name}: "activeOnOrAfter"`, true);
-      expectOptionalDate(activeOnOrBefore, `${name}: "activeOnOrBefore"`, true);
+      expectUuids(drugs, number, 'drugs', MAX_DRUGS);
+      expectOptionalDate(activeOnOrAfter, number, 'activeOnOrAfter', true);
+      expectOptionalDate(activeOnOrBefore, number, 'activeOnOrBefore', true);
       return {
         type,
         drugs: drugs as string[],
@@ -202,38 +243,67 @@ function validateCriterion(value: unknown, index: number): Criterion {
       };
     }
     default:
-      throw new Error(`${name}: "type" must be "demographics", "enrollment" or "drugOrder"`);
+      throw new LinkError(
+        'criterionType',
+        'Criterion {{number}}: "type" must be "demographics", "enrollment" or "drugOrder"',
+        { number },
+      );
   }
 }
 
-function expectObject(value: unknown, name: string, allowedKeys: string[]): Record<string, unknown> {
+function findUnknownKey(value: object, allowedKeys: string[]) {
+  return Object.keys(value).find((key) => !allowedKeys.includes(key));
+}
+
+function expectCriterionObject(value: unknown, number: number, allowedKeys: string[]): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error(`${name} must be a JSON object`);
+    throw new LinkError('criterionNotObject', 'Criterion {{number}} must be a JSON object', { number });
   }
-  const unknownKey = Object.keys(value).find((key) => !allowedKeys.includes(key));
+  const unknownKey = findUnknownKey(value, allowedKeys);
   if (unknownKey !== undefined) {
-    throw new Error(`${name} has an unknown key "${unknownKey}"`);
+    throw new LinkError('criterionUnknownKey', 'Criterion {{number}} has an unknown key "{{key}}"', {
+      number,
+      key: unknownKey,
+    });
   }
   return value as Record<string, unknown>;
 }
 
-function expectOptionalAge(value: unknown, name: string, min: number) {
+function expectOptionalAge(value: unknown, number: number, field: string, min: number) {
   if (value !== undefined && (!Number.isInteger(value) || (value as number) < min || (value as number) > MAX_AGE)) {
-    throw new Error(`${name} must be a whole number from ${min} to ${MAX_AGE}`);
+    throw new LinkError(
+      'criterionAge',
+      'Criterion {{number}}: "{{field}}" must be a whole number from {{min}} to {{max}}',
+      { number, field, min, max: MAX_AGE },
+    );
   }
 }
 
-function expectUuids(value: unknown, name: string, max: number) {
+function expectUuids(value: unknown, number: number, field: string, max: number) {
   if (!Array.isArray(value) || value.length < 1 || value.length > max || !value.every(isUuid)) {
-    throw new Error(`${name} must list 1 to ${max} uuids`);
+    throw new LinkError('criterionUuids', 'Criterion {{number}}: "{{field}}" must list 1 to {{max}} uuids', {
+      number,
+      field,
+      max,
+    });
   }
 }
 
-function expectOptionalDate(value: unknown, name: string, allowToday: boolean) {
+function expectOptionalDate(value: unknown, number: number, field: string, allowToday: boolean) {
   if (value === undefined || (allowToday && value === 'today') || isIsoDate(value)) {
     return;
   }
-  throw new Error(`${name} must be ${allowToday ? '"today" or ' : ''}a date like 2024-01-31`);
+  if (allowToday) {
+    throw new LinkError(
+      'criterionDateOrToday',
+      'Criterion {{number}}: "{{field}}" must be "today" or a date like 2024-01-31',
+      { number, field },
+    );
+  }
+  throw new LinkError('criterionDate', 'Criterion {{number}}: "{{field}}" must be a date like 2024-01-31', {
+    number,
+    field,
+  });
 }
 
 export function isUuid(value: unknown): value is string {

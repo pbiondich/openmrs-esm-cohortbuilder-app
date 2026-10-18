@@ -28,6 +28,7 @@ vi.mock('../components/composition/composition.component', () => ({ default: () 
 vi.mock('../components/saved-cohorts/saved-cohorts.component', () => ({ default: () => null }));
 vi.mock('../components/saved-queries/saved-queries.component', () => ({ default: () => null }));
 
+// The react-i18next mock returns default texts without interpolating them.
 const mockOpenmrsFetch = vi.mocked(openmrsFetch);
 const mockUseConfig = vi.mocked(useConfig<ConfigObject>);
 
@@ -213,9 +214,7 @@ describe('useUrlDefinition', () => {
 
     expect(await screen.findByText('This cohort builder link could not be opened')).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /^The search "Patients who taking 1 drug .+" failed, so none of this link's searches were kept$/,
-      ),
+      screen.getByText('The search "{{description}}" failed, so none of this link\'s searches were kept'),
     ).toBeInTheDocument();
     expect(showSnackbar).toHaveBeenCalledWith(expect.objectContaining({ subtitle: 'Internal Server Error' }));
     expect(adHocQueryBodies()).toHaveLength(3);
@@ -244,10 +243,10 @@ describe('useUrlDefinition', () => {
     [
       'an unknown key',
       `definition=${encode({ ...definition, sql: 'drop table' })}`,
-      'Definition has an unknown key "sql"',
+      'Definition has an unknown key "{{key}}"',
     ],
-    ['too large', `definition=${'A'.repeat(6000)}`, 'Definition is larger than 4096 bytes'],
-    ['a cohort that is not a uuid', 'cohort=..%2F..%2Fuser', '"cohort" must be a uuid'],
+    ['too large', `definition=${'A'.repeat(6000)}`, 'Definition is larger than {{maxBytes}} bytes'],
+    ['a cohort that is not a uuid', 'cohort=..%2F..%2Fuser', '"{{param}}" must be a uuid'],
   ])('shows an error, runs nothing and clears the URL when it is %s', async (_, search, message) => {
     openBuilderAt(`?${search}`);
 
