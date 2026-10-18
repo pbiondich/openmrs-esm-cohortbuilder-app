@@ -264,7 +264,7 @@ export function toQueryDate(value: string | undefined): string {
 /**
  * Builds the reportingrest query and history description for one criterion using the
  * same builders as the search tabs. `names` maps program/drug uuids to display names;
- * when any is missing the description falls back to a count such as "3 drugs".
+ * missing ones are counted instead, as in "Lamivudine and 2 more drugs".
  */
 export function buildSearch(
   criterion: Criterion,
@@ -330,8 +330,15 @@ function toDescribedValues(
   singular: string,
   plural: string,
 ): DropdownValue[] {
-  if (uuids.every((uuid) => names.has(uuid))) {
-    return toDropdownValues(uuids, names);
+  const named = toDropdownValues(
+    uuids.filter((uuid) => names.has(uuid)),
+    names,
+  );
+  const missing = uuids.length - named.length;
+  if (missing === 0) {
+    return named;
   }
-  return [{ id: 0, label: `${uuids.length} ${uuids.length === 1 ? singular : plural}`, value: '' }];
+  const noun = missing === 1 ? singular : plural;
+  const label = named.length ? `${missing} more ${noun}` : `${missing} ${noun}`;
+  return [...named, { id: named.length, label, value: '' }];
 }
