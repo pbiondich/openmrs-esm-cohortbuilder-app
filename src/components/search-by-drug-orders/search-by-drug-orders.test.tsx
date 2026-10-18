@@ -175,6 +175,31 @@ describe('Test the search by drug orders component', () => {
     expect(mockSubmit.mock.calls[0][0].query.rowFilters[0].parameterValues).toEqual({ drugs: [mockDrugs[1].value] });
   });
 
+  it('lets Search run only with a drug, also after Reset clears it', async () => {
+    const user = userEvent.setup();
+    mockUseConfig.mockReturnValue(getDefaultsFromConfigSchema(configSchema));
+    mockUseCareSettings.mockImplementation(() => ({
+      careSettings: mockCareSettings,
+      isLoading: false,
+      careSettingsError: undefined,
+    }));
+    mockUseDrugs.mockImplementation(() => ({ drugs: mockDrugs, isLoading: false, drugsError: undefined }));
+    const mockSubmit = vi.fn();
+
+    render(<SearchByDrugOrder onSubmit={mockSubmit} />);
+    expect(screen.getByTestId('search-btn')).toBeDisabled();
+
+    await user.click(screen.getByText(/select drugs/i));
+    await user.click(screen.getByText(mockDrugs[1].label));
+    await user.keyboard('{Escape}');
+    expect(screen.getByTestId('search-btn')).toBeEnabled();
+
+    await user.click(screen.getByTestId('reset-btn'));
+    expect(screen.getByTestId('search-btn')).toBeDisabled();
+    expect(screen.getByTestId('search-btn')).toHaveTextContent('Search');
+    expect(mockSubmit).not.toHaveBeenCalled();
+  });
+
   it('shows a failed drug list once, not on every render', () => {
     // SWR keeps returning the same error object until the request is retried.
     const listError = new Error('Forbidden');
