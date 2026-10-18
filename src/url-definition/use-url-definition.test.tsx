@@ -236,6 +236,7 @@ describe('useUrlDefinition', () => {
 
   it('uses the configured drug order search definition key', async () => {
     mockUseConfig.mockReturnValue({
+      ...(getDefaultsFromConfigSchema(configSchema) as ConfigObject),
       drugOrderSearchDefinitionKey: 'configuration.definitionlibrary.cohort.drugOrderSearch',
     });
     openBuilderAt(`?definition=${encode({ v: 1, criteria: [definition.criteria[2]] })}`);
