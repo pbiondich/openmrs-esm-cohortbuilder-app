@@ -3,6 +3,7 @@ import { Column, NumberInput, MultiSelect } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { showSnackbar } from '@openmrs/esm-framework';
 import { useLocations } from '../../cohort-builder.resources';
+import { withSelectedItems } from '../../cohort-builder.utils';
 import type { SearchByProps, DropdownValue } from '../../types';
 import { getDescription, getQueryDetails } from './search-by-encounters.utils';
 import { useEncounterTypes, useForms } from './search-by-encounters.resources';
@@ -22,6 +23,9 @@ const SearchByEncounters: React.FC<SearchByProps> = ({ onSubmit }) => {
   const { forms, formsError } = useForms();
   const [onOrBefore, setOnOrBefore] = useState('');
   const [onOrAfter, setOnOrAfter] = useState('');
+  const encounterTypeOptions = withSelectedItems(encounterTypes, selectedEncounterTypes);
+  const formOptions = withSelectedItems(forms, encounterForms);
+  const locationOptions = withSelectedItems(locations, encounterLocations);
   const [isLoading, setIsLoading] = useState(false);
 
   if (locationsError) {
@@ -54,6 +58,9 @@ const SearchByEncounters: React.FC<SearchByProps> = ({ onSubmit }) => {
   const reset = () => {
     setAtLeastCount(0);
     setAtMostCount(0);
+    setSelectedEncounterTypes([]);
+    setEncounterForms([]);
+    setEncounterLocations([]);
     setOnOrBefore('');
     setOnOrAfter('');
   };
@@ -80,7 +87,8 @@ const SearchByEncounters: React.FC<SearchByProps> = ({ onSubmit }) => {
           <MultiSelect
             id="encounters"
             onChange={(data) => setSelectedEncounterTypes(data.selectedItems)}
-            items={encounterTypes}
+            items={encounterTypeOptions.items}
+            selectedItems={encounterTypeOptions.selectedItems}
             label={t('selectEncounterTypes', 'Select encounter types')}
           />
         </div>
@@ -89,14 +97,16 @@ const SearchByEncounters: React.FC<SearchByProps> = ({ onSubmit }) => {
         id="forms"
         data-testid="forms"
         onChange={(data) => setEncounterForms(data.selectedItems)}
-        items={forms}
+        items={formOptions.items}
+        selectedItems={formOptions.selectedItems}
         label={t('selectForms', 'Select forms')}
       />
 
       <MultiSelect
         id="locations"
         onChange={(data) => setEncounterLocations(data.selectedItems)}
-        items={locations}
+        items={locationOptions.items}
+        selectedItems={locationOptions.selectedItems}
         label={t('selectLocations', 'Select locations')}
       />
       <div className={styles.column}>
