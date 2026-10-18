@@ -589,6 +589,8 @@ describe('saved cohorts and saved queries', () => {
       results: [
         { uuid: '2e9f6d2b-0c41-4b7e-9d0b-9f7c3b0d1a11', name: '   ' },
         { uuid: '3f0a7e3c-1d52-4c8f-8e1c-0a8d4c1e2b22' },
+        // Only format characters: a zero-width space, a byte order mark and a word joiner.
+        { uuid: '4a1b8f4d-2e63-4d9a-9f2d-1b9e5d2f3c33', name: '\u200B \uFEFF\u2060' },
         { uuid: cohortUuid, name: 'Named' },
       ],
     });
@@ -602,10 +604,46 @@ describe('saved cohorts and saved queries', () => {
         results: [
           { uuid: '2e9f6d2b-0c41-4b7e-9d0b-9f7c3b0d1a11', name: '[AdHocDataExport]' },
           { uuid: '3f0a7e3c-1d52-4c8f-8e1c-0a8d4c1e2b22', name: '[AdHocDataExport]   ' },
+          { uuid: '4a1b8f4d-2e63-4d9a-9f2d-1b9e5d2f3c33', name: '[AdHocDataExport] \u200B\uFEFF' },
           { uuid: queryUuid, name: '[AdHocDataExport] Named' },
         ],
       }).map((hit) => hit.name),
     ).toEqual(['Named']);
+  });
+
+  it('shows a description only when it is text, so the host never gets an object to draw', async () => {
+    respond({
+      results: [
+        { uuid: cohortUuid, name: 'Object', description: { x: 1 }, size: 3 },
+        { uuid: '2e9f6d2b-0c41-4b7e-9d0b-9f7c3b0d1a11', name: 'Number', description: 42 },
+        { uuid: '3f0a7e3c-1d52-4c8f-8e1c-0a8d4c1e2b22', name: 'Text', description: 'Everyone in care' },
+      ],
+    });
+    const { last: lastCohorts } = renderProvider(SavedCohortsProvider, fresh('de'));
+    await settle();
+    expect(lastCohorts().results.map((result) => result.subtitle)).toEqual([
+      '3 members',
+      'Open in the Cohort Builder',
+      'Everyone in care',
+    ]);
+
+    respond({
+      results: [
+        { uuid: cohortUuid, name: '[AdHocDataExport] Desc object', description: { x: 1 } },
+        { uuid: '2e9f6d2b-0c41-4b7e-9d0b-9f7c3b0d1a11', name: '[AdHocDataExport] Desc number', description: 42 },
+        { uuid: '3f0a7e3c-1d52-4c8f-8e1c-0a8d4c1e2b22', name: '[AdHocDataExport] Desc text', description: 'Women' },
+      ],
+    });
+    const { last: lastQueries } = renderProvider(SavedQueriesProvider, 'desc');
+    await settle();
+    expect(lastQueries().results.map((result) => result.subtitle)).toEqual([
+      'Run in the Cohort Builder',
+      'Run in the Cohort Builder',
+      'Women',
+    ]);
+    expect(
+      [...lastCohorts().results, ...lastQueries().results].every((result) => typeof result.subtitle === 'string'),
+    ).toBe(true);
   });
 
   it('never searches an empty query, even when savedSearchMinCharacters is set below 1', async () => {
