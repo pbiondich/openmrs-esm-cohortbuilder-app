@@ -104,7 +104,7 @@ describe('Test the search by location component', () => {
     await waitFor(() => {
       expect(mockSubmit).toBeCalledWith(
         expectedQuery,
-        `Patients in ${mockLocations[2].label} (by method ANY_ENCOUNTER).`,
+        `Patients in ${mockLocations[2].label} (by method LATEST_ENCOUNTER).`,
       );
     });
   });
