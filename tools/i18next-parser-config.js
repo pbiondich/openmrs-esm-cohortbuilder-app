@@ -15,7 +15,7 @@ module.exports = {
   indentation: 2,
   // Indentation of the catalog files
 
-  keepRemoved: false,
+  keepRemoved: [/^translations:(definition|criterion|link)[A-Z]/],
   // Keep keys from the catalog that are no longer in code
 
   keySeparator: '.',
