@@ -85,7 +85,11 @@ export function useUrlDefinition({
   if (!error) {
     return null;
   }
-  return error instanceof LinkError ? t(error.key, error.defaultMessage, error.options) : error.message;
+  if (!(error instanceof LinkError)) {
+    return error.message;
+  }
+  // The message is rendered as React text, which escapes it already; i18next escaping would show "&#x2F;".
+  return t(error.key, error.defaultMessage, { ...error.options, interpolation: { escapeValue: false } });
 }
 
 function removeUrlParams() {
