@@ -16,8 +16,8 @@ import { fetchDisplayNames } from './url-definition.resources';
 
 interface UrlDefinitionHandlers {
   runSearch: (searchParams: SearchParams, description: string) => Promise<boolean>;
-  showCohort: (cohortUuid: string) => Promise<void>;
-  showQuery: (queryUuid: string) => Promise<void>;
+  showCohort: (cohortUuid: string) => Promise<boolean>;
+  showQuery: (queryUuid: string) => Promise<boolean>;
   onHistoryChange: () => void;
 }
 
@@ -72,9 +72,15 @@ function removeUrlParams() {
 async function runRequest(request: UrlRequest, handlers: UrlDefinitionHandlers, drugOrderSearchDefinitionKey: string) {
   switch (request.type) {
     case 'cohort':
-      return handlers.showCohort(request.uuid);
+      if (!(await handlers.showCohort(request.uuid))) {
+        throw new Error('The saved cohort could not be loaded');
+      }
+      return;
     case 'query':
-      return handlers.showQuery(request.uuid);
+      if (!(await handlers.showQuery(request.uuid))) {
+        throw new Error('The saved query could not be run');
+      }
+      return;
     case 'definition':
       return runDefinition(request.definition, handlers, drugOrderSearchDefinitionKey);
   }

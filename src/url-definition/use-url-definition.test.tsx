@@ -12,6 +12,7 @@ const drugUuid = '3cfcf118-931c-46f7-8ff6-7b876f0d4202';
 const cohortUuid = 'f4c0b5a2-3c84-4c76-bb7e-6c1b1b2e5a11';
 const queryUuid = '0d1b7a4e-6f3c-4b3a-9c3e-2a6f5a8b9c10';
 const patientUuid = '8673ee4f-e2ab-4077-ba55-4980f408773e';
+const missingUuid = '11111111-2222-4333-8444-555555555555';
 
 // The search tabs are not involved in opening a link and are slow to render.
 vi.mock('../components/search-by-concepts/search-by-concepts.component', () => ({ default: () => null }));
@@ -57,6 +58,9 @@ let beforeAdHocQueryAnswers: (call: number) => void;
 function mockServer() {
   let adHocQueryCalls = 0;
   mockOpenmrsFetch.mockImplementation(async (url: string) => {
+    if (url.includes(missingUuid)) {
+      throw new Error("Object with given uuid doesn't exist");
+    }
     if (url.includes('/reportingrest/adhocquery')) {
       beforeAdHocQueryAnswers(adHocQueryCalls);
       const result = adHocQueryResults[adHocQueryCalls++] ?? [];
@@ -263,6 +267,17 @@ describe('useUrlDefinition', () => {
     expect(await screen.findByText('Amina Otieno')).toBeInTheDocument();
     expect(mockOpenmrsFetch).toHaveBeenCalledWith(expect.stringContaining(`/cohort/${cohortUuid}/membership?`));
     expect(mockOpenmrsFetch.mock.calls.filter(([url]) => url.includes('/membership'))).toHaveLength(1);
+    expect(window.location.search).toBe('');
+  });
+
+  it.each([
+    ['cohort', 'The saved cohort could not be loaded'],
+    ['query', 'The saved query could not be run'],
+  ])('shows an error when the saved %s cannot be loaded', async (name, message) => {
+    openBuilderAt(`?${name}=${missingUuid}`);
+
+    expect(await screen.findByText('This cohort builder link could not be opened')).toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
     expect(window.location.search).toBe('');
   });
 
