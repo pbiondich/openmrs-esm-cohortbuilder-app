@@ -144,6 +144,31 @@ describe('getCohortMembers', () => {
     }
   });
 
+  it('leaves out a membership with a bound that is not a date, without failing the others', async () => {
+    membershipPages = [
+      [
+        membership(1),
+        membership(2, { startDate: 123 }),
+        membership(3, { startDate: {} }),
+        membership(4, { startDate: ['2020-01-01T00:00:00.000+0000'] }),
+        membership(5, { startDate: '' }),
+        membership(6, { endDate: '' }),
+        membership(7, { endDate: 0 }),
+        membership(8, { endDate: false }),
+        membership(9, { endDate: true }),
+        membership(10, { endDate: 'soon' }),
+        membership(11, { endDate: '2026-10-16T00:00:00.000+0000' }),
+        membership(12, { voided: true }),
+        membership(13, { startDate: undefined, endDate: undefined }),
+      ],
+    ];
+
+    const { patients, total } = await getCohortMembers(cohortUuid);
+
+    expect(patients.map(({ patientId }) => patientId)).toEqual([1, 13]);
+    expect(total).toBe(2);
+  });
+
   it('skips members that cannot be loaded or shown', async () => {
     membershipPages = [[membership(1), membership(2), membership(3), membership(4, { patientUuid: '../../user' })]];
     patientDetails = async (n) => {
