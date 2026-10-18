@@ -3,7 +3,7 @@ import { SWRConfig } from 'swr';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { openmrsFetch } from '@openmrs/esm-framework';
-import { getCohortMembers, MAX_COHORT_MEMBERS_SHOWN, useLocations } from './cohort-builder.resources';
+import { getCohortMembers, getDataSet, MAX_COHORT_MEMBERS_SHOWN, useLocations } from './cohort-builder.resources';
 
 const mockOpenmrsFetch = vi.mocked(openmrsFetch);
 const cohortUuid = 'f4c0b5a2-3c84-4c76-bb7e-6c1b1b2e5a11';
@@ -179,6 +179,23 @@ describe('getCohortMembers', () => {
   it('refuses a cohort id that is not a uuid before fetching anything', async () => {
     await expect(getCohortMembers('../../user')).rejects.toThrow('Not a cohort uuid');
     expect(mockOpenmrsFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('getDataSet', () => {
+  it('names each patient with only the parts of a name they have', async () => {
+    const row = (patientId: number, firstname: string | null, lastname: string | null) => ({
+      patientId,
+      firstname,
+      lastname,
+    });
+    mockOpenmrsFetch.mockResolvedValue({
+      data: { rows: [row(1, null, null), row(2, 'Ann', null), row(3, null, 'Banda'), row(4, 'Ann', 'Banda')] },
+    } as never);
+
+    const patients = await getDataSet('query-uuid');
+
+    expect(patients.map(({ name }) => name)).toEqual(['', 'Ann', 'Banda', 'Ann Banda']);
   });
 });
 
