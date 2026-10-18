@@ -24,8 +24,9 @@ interface UrlDefinitionHandlers {
 }
 
 /**
- * Runs the definition, saved cohort or saved query named in the page URL, once, and removes it
- * from the URL so a reload does not run it again. Returns why the link could not be opened, if it could not.
+ * Runs the definition, saved cohort or saved query named in the page URL, and removes it from the URL
+ * first, so each link runs once. Also runs links opened while the page is shown, such as from the
+ * omnibar. Returns why the last link could not be opened, if it could not.
  */
 export function useUrlDefinition({
   runSearch,
@@ -36,31 +37,49 @@ export function useUrlDefinition({
   const { t } = useTranslation();
   const { drugOrderSearchDefinitionKey } = useConfig<ConfigObject>();
   const [error, setError] = useState<Error | null>(null);
-  const hasRun = useRef(false);
+  const isRunning = useRef(false);
+  // A link opened while another is still running waits here; only the latest one is kept.
+  const queuedParams = useRef<URLSearchParams | null>(null);
 
   useEffect(() => {
-    // StrictMode runs effects twice in development; the URL must only be consumed once.
-    if (hasRun.current) {
-      return;
-    }
-    hasRun.current = true;
-
-    const params = new URLSearchParams(window.location.search);
-    if (!URL_PARAMS.some((name) => params.has(name))) {
-      return;
-    }
-    removeUrlParams();
-
-    let request: UrlRequest;
-    try {
-      request = readUrlRequest(params);
-    } catch (invalidUrlError) {
-      setError(invalidUrlError);
-      return;
-    }
-
     const handlers = { runSearch, showCohort, showQuery, onHistoryChange };
-    runRequest(request, handlers, drugOrderSearchDefinitionKey).catch(setError);
+
+    const runLink = async (params: URLSearchParams) => {
+      isRunning.current = true;
+      setError(null);
+      try {
+        await runRequest(readUrlRequest(params), handlers, drugOrderSearchDefinitionKey);
+      } catch (linkError) {
+        setError(linkError);
+      }
+      isRunning.current = false;
+
+      const nextParams = queuedParams.current;
+      queuedParams.current = null;
+      if (nextParams) {
+        runLink(nextParams);
+      }
+    };
+
+    const openLinkInUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (!URL_PARAMS.some((name) => params.has(name))) {
+        return;
+      }
+      // Removing the params before running is what makes a link run once: a reload, StrictMode's
+      // second effect or a later popstate finds nothing to run.
+      removeUrlParams();
+      if (isRunning.current) {
+        queuedParams.current = params;
+      } else {
+        runLink(params);
+      }
+    };
+
+    openLinkInUrl();
+    // The page stays mounted when another link to it is opened; single-spa's navigateToUrl fires popstate.
+    window.addEventListener('popstate', openLinkInUrl);
+    return () => window.removeEventListener('popstate', openLinkInUrl);
   }, [runSearch, showCohort, showQuery, onHistoryChange, drugOrderSearchDefinitionKey]);
 
   if (!error) {
