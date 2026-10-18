@@ -335,8 +335,3 @@ function toDescribedValues(
   }
   return [{ id: 0, label: `${uuids.length} ${uuids.length === 1 ? singular : plural}`, value: '' }];
 }
-
-/** The composition text that ANDs the last `count` history entries, e.g. "4 AND 5 AND 6". */
-export function andLastEntries(historyLength: number, count: number): string {
-  return Array.from({ length: count }, (_, index) => historyLength - count + index + 1).join(' AND ');
-}

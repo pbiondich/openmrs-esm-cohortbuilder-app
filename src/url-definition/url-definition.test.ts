@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  andLastEntries,
   buildSearch,
   decodeDefinition,
   isUuid,
@@ -453,12 +452,5 @@ describe('buildSearch', () => {
     expect(activeOnOrAfter()).toEqual({ activeOnOrAfter: '2026-10-17T00:00:00+00:00', drugs: [drugUuid] });
     vi.setSystemTime(new Date('2026-10-18T00:00:01Z'));
     expect(activeOnOrAfter()).toEqual({ activeOnOrAfter: '2026-10-18T00:00:00+00:00', drugs: [drugUuid] });
-  });
-});
-
-describe('andLastEntries', () => {
-  it('ANDs the newest history entries', () => {
-    expect(andLastEntries(3, 3)).toBe('1 AND 2 AND 3');
-    expect(andLastEntries(6, 2)).toBe('5 AND 6');
   });
 });

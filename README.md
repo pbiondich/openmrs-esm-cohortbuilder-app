@@ -50,7 +50,7 @@ If several are given, `definition` wins over `cohort`, which wins over `query`; 
 - Uuids are standard uuids or 36-character ids such as CIEL's `1065AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`.
 - The encoded definition is [base64url](https://www.rfc-editor.org/rfc/rfc4648#section-5) of UTF-8 JSON, with or without `=` padding, and at most 4096 bytes once decoded.
 
-Anything else (unknown keys, wrong types, out-of-range values, bad base64url, too large) rejects the whole link: an error notification explains why, nothing is run, and the builder works as usual. If one of the searches fails on the server, the search history goes back to how it was before the link was opened and the notification says which search failed.
+Anything else (unknown keys, wrong types, out-of-range values, bad base64url, too large) rejects the whole link: an error notification explains why, nothing is run, and the builder works as usual. If one of the searches fails on the server, the entries the link added are removed from the search history (searches you ran meanwhile stay) and the notification says which search failed.
 
 To make a link, encode the JSON with either of these one-liners and append it to `/openmrs/spa/cohort-builder?definition=`:
 
