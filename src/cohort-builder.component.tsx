@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import classNames from 'classnames';
-import { Tab, Tabs, TabPanels, TabPanel, TabList } from '@carbon/react';
+import { InlineNotification, Tab, Tabs, TabPanels, TabPanel, TabList } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { CohortsPictogram, PageHeader, PageHeaderContent, showSnackbar, useLayoutType } from '@openmrs/esm-framework';
 import { getCohortMembers, getDataSet, search } from './cohort-builder.resources';
 import { addToHistory } from './cohort-builder.utils';
 import type { Patient, SearchParams } from './types';
+import { useUrlDefinition } from './url-definition/use-url-definition';
 import Composition from './components/composition/composition.component';
 import SavedCohorts from './components/saved-cohorts/saved-cohorts.component';
 import SavedQueries from './components/saved-queries/saved-queries.component';
@@ -60,7 +61,7 @@ const CohortBuilder: React.FC = () => {
             isLowContrast: false,
             subtitle: error?.message,
           });
-          resolve(true);
+          resolve(false);
         });
     });
   };
@@ -108,6 +109,12 @@ const CohortBuilder: React.FC = () => {
       });
     }
   };
+
+  const urlDefinitionError = useUrlDefinition({
+    runSearch,
+    showCohort: getCohortResults,
+    showQuery: getQueryResults,
+  });
 
   const tabs: TabItem[] = [
     {
@@ -158,6 +165,14 @@ const CohortBuilder: React.FC = () => {
         <PageHeaderContent illustration={<CohortsPictogram />} title={t('cohortBuilder', 'Cohort Builder')} />
       </PageHeader>
       <div className={classNames(styles.mainContainer, styles.cohortBuilder)}>
+        {urlDefinitionError && (
+          <InlineNotification
+            kind="error"
+            lowContrast
+            title={t('invalidCohortBuilderLink', 'This cohort builder link is not valid')}
+            subtitle={urlDefinitionError}
+          />
+        )}
         <div className={classNames(isLayoutTablet ? styles.tabletContainer : styles.desktopContainer)}>
           <div className={styles.tabContainer}>
             <p className={styles.heading}>{t('searchCriteria', 'Search Criteria')}</p>

@@ -60,6 +60,7 @@
   "haveNoObservations": "Patients who do not have these observations",
   "haveObservations": "Patients who have these observations",
   "highest": "Highest",
+  "invalidCohortBuilderLink": "This cohort builder link is not valid",
   "invalidComposition": "Composition is not valid",
   "itemsPerPage": "Items per page:",
   "lastDays": "and / or days",
