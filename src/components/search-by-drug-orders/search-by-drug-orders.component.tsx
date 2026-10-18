@@ -107,6 +107,7 @@ const SearchByDrugOrder: React.FC<SearchByDrugOrderProps> = ({ onSubmit, initial
       <div className={styles.column}>
         <Column>
           <DatePicker
+            dateFormat="d-m-Y"
             datePickerType="single"
             allowInput={false}
             onChange={(date) => setActiveOnOrAfter(dayjs(date[0]).format())}
@@ -122,6 +123,7 @@ const SearchByDrugOrder: React.FC<SearchByDrugOrderProps> = ({ onSubmit, initial
         </Column>
         <Column>
           <DatePicker
+            dateFormat="d-m-Y"
             datePickerType="single"
             allowInput={false}
             onChange={(date) => setActiveOnOrBefore(dayjs(date[0]).format())}
@@ -134,6 +136,7 @@ const SearchByDrugOrder: React.FC<SearchByDrugOrderProps> = ({ onSubmit, initial
       <div className={styles.column}>
         <Column>
           <DatePicker
+            dateFormat="d-m-Y"
             datePickerType="single"
             allowInput={false}
             onChange={(date) => setActivatedOnOrAfter(dayjs(date[0]).format())}
@@ -149,6 +152,7 @@ const SearchByDrugOrder: React.FC<SearchByDrugOrderProps> = ({ onSubmit, initial
         </Column>
         <Column>
           <DatePicker
+            dateFormat="d-m-Y"
             datePickerType="single"
             allowInput={false}
             onChange={(date) => setActivatedOnOrBefore(dayjs(date[0]).format())}
