@@ -23,7 +23,7 @@ Links can open the builder with a search already run. The page reads one of thes
 | Parameter | What it does |
 | --- | --- |
 | `?definition=<base64url JSON>` | Runs each criterion as a search, then (for 2 or more) a composition that ANDs them |
-| `?cohort=<uuid>` | Shows the members of a saved cohort |
+| `?cohort=<uuid>` | Shows the members of a saved cohort (the first 200 active members; a note says when there are more). It is not added to the search history. |
 | `?query=<uuid>` | Runs a saved query |
 
 If several are given, `definition` wins over `cohort`, which wins over `query`; the others are ignored with a console warning. The parameter is removed from the URL (with `history.replaceState`) as soon as it is read, so reloading the page does not run it again.
@@ -50,7 +50,7 @@ If several are given, `definition` wins over `cohort`, which wins over `query`; 
 - Uuids are standard uuids or 36-character ids such as CIEL's `1065AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`.
 - The encoded definition is [base64url](https://www.rfc-editor.org/rfc/rfc4648#section-5) of UTF-8 JSON, with or without `=` padding, and at most 4096 bytes once decoded.
 
-Anything else (unknown keys, wrong types, out-of-range values, bad base64url, too large) rejects the whole link: an error notification explains why, nothing is run, and the builder works as usual. If one of the searches fails on the server, the entries the link added are removed from the search history (searches you ran meanwhile stay) and the notification says which search failed.
+Anything else (unknown keys, wrong types, out-of-range values, bad base64url, too large) rejects the whole link: an error notification explains why, nothing is run, and the builder works as usual. If a linked saved cohort or query cannot be loaded, the same notification says so. If one of the searches fails on the server, the entries the link added are removed from the search history (searches you ran meanwhile stay) and the notification says which search failed.
 
 To make a link, encode the JSON with either of these one-liners and append it to `/openmrs/spa/cohort-builder?definition=`:
 

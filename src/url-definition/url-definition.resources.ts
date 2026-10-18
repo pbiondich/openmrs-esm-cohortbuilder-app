@@ -3,7 +3,7 @@ import { type CohortDefinition, isUuid } from './url-definition';
 
 /**
  * Looks up display names for the programs and drugs in a definition, for history descriptions only.
- * Best effort: anything that fails to load is left out and the description falls back to a count.
+ * Best effort: anything that fails to load is left out and counted in the description instead.
  */
 export async function fetchDisplayNames(definition: CohortDefinition): Promise<Map<string, string>> {
   const lookups: Array<[resource: string, uuid: string]> = definition.criteria.flatMap((criterion) => {

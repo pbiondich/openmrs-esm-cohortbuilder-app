@@ -280,6 +280,23 @@ describe('useUrlDefinition', () => {
     expect(window.location.search).toBe('');
   });
 
+  it('says when a saved cohort has more members than are shown', async () => {
+    const memberships = Array.from({ length: 201 }, (_, i) => ({
+      uuid: `membership-${i}`,
+      patientUuid,
+      startDate: null,
+      endDate: null,
+      voided: false,
+    }));
+    const answerAsServer = mockOpenmrsFetch.getMockImplementation();
+    mockOpenmrsFetch.mockImplementation(async (url: string, init) =>
+      url.includes('/membership') ? ({ data: { results: memberships } } as never) : answerAsServer(url, init),
+    );
+    openBuilderAt(`?cohort=${cohortUuid}`);
+
+    expect(await screen.findByText('Showing the first {{shown}} of {{total}} members')).toBeInTheDocument();
+  });
+
   it('runs a saved query', async () => {
     openBuilderAt(`?query=${queryUuid}`);
 
