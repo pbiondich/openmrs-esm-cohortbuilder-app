@@ -53,7 +53,7 @@ const SearchByLocation: React.FC<SearchByProps> = ({ onSubmit }) => {
     setIsLoading(true);
     await onSubmit(
       getQueryDetails(selectedMethod.value, selectedLocations),
-      getDescription(selectedMethod.label, selectedLocations),
+      getDescription(selectedMethod.value, selectedLocations),
     );
     setIsLoading(false);
   };
