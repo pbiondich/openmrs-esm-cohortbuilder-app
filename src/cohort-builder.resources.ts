@@ -133,7 +133,12 @@ async function getAllMemberships(cohortId: string) {
 
 /** Same rule as core's CohortMembership.isActive: not voided, started, and not yet ended. */
 function isActiveMembership({ voided, startDate, endDate }: CohortMembership, now: Date) {
-  return !voided && (!startDate || new Date(startDate) <= now) && (!endDate || new Date(endDate) >= now);
+  return !voided && (!startDate || parseTimestamp(startDate) <= now) && (!endDate || parseTimestamp(endDate) >= now);
+}
+
+/** OpenMRS writes offsets as +0000, which Safari can't parse; the standard +00:00 is the same instant. */
+function parseTimestamp(timestamp: string) {
+  return new Date(timestamp.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
 }
 
 /** Loads one member for the results table, or null if it cannot be shown. */
