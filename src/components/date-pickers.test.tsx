@@ -174,7 +174,9 @@ describe('date pickers', () => {
     );
     render(<SearchByDrugOrder onSubmit={onSubmit} initialValues={drugOrder} />);
 
-    await waitFor(() => expect(dateInputs().map((input) => input.value)).toEqual(['17-10-2026', '31-12-2026', '', '']));
+    // "today" is the local day, which in some time zones is not the UTC day of the frozen clock.
+    const today = dayjs().format('DD-MM-YYYY');
+    await waitFor(() => expect(dateInputs().map((input) => input.value)).toEqual([today, '31-12-2026', '', '']));
     await userEvent.click(screen.getByTestId('search-btn'));
     expect(onSubmit.mock.calls[0][0]).toEqual(
       getDrugOrderQuery(
