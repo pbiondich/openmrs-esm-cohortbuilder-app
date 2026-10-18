@@ -7,12 +7,13 @@ interface ProgramsResponse extends Response {
 }
 
 /**
- * @returns Programs
+ * @returns Programs. Only uuid and name: the default representation converts every program's workflows,
+ * and one workflow that fails to convert makes the server answer 400 for the whole list.
  */
 export function usePrograms() {
   const { data, error } = useSWRImmutable<{
     data: { results: ProgramsResponse[] };
-  }>(`${restBaseUrl}/program`, openmrsFetch);
+  }>(`${restBaseUrl}/program?v=custom:(uuid,name)`, openmrsFetch);
 
   const programs: DropdownValue[] = [];
   data?.data.results.map((program: ProgramsResponse, index: number) => {
