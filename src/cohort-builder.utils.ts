@@ -127,6 +127,9 @@ export const withSelectedItems = (items: DropdownValue[], selected: DropdownValu
   return { items: [...items, ...selectedItems.filter((item) => !items.includes(item))], selectedItems };
 };
 
+/** A patient's name from the parts they have, so a missing one doesn't show as "null". */
+export const getPatientName = (...parts: Array<string | null | undefined>) => parts.filter(Boolean).join(' ');
+
 export const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   const day = date.getDate();
