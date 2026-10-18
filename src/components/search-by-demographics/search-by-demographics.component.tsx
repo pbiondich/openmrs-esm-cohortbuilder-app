@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import classNames from 'classnames';
-import dayjs from 'dayjs';
-import { Column, ContentSwitcher, DatePicker, DatePickerInput, NumberInput, Switch } from '@carbon/react';
+import { Column, ContentSwitcher, NumberInput, Switch } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { type SearchByProps } from '../../types';
 import { type Demographics, getDescription, getQueryDetails } from './search-by-demographics.utils';
 import SearchButtonSet from '../search-button-set/search-button-set';
+import SearchDatePicker from '../search-date-picker/search-date-picker';
 import styles from './search-by-demographics.style.scss';
 
 interface SearchByDemographicsProps extends SearchByProps {
@@ -137,31 +137,20 @@ const SearchByDemographics: React.FC<SearchByDemographicsProps> = ({ onSubmit, i
       </div>
       <div className={styles.column}>
         <Column>
-          <DatePicker
-            dateFormat="d-m-Y"
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setBirthDayStartDate(dayjs(date[0]).format())}
-            value={birthDayStartDate && dayjs(birthDayStartDate).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput
-              id="startDate"
-              labelText={t('birthDate', 'Birth date between')}
-              placeholder="DD-MM-YYYY"
-              size="md"
-            />
-          </DatePicker>
+          <SearchDatePicker
+            id="startDate"
+            labelText={t('birthDate', 'Birth date between')}
+            value={birthDayStartDate}
+            onChange={setBirthDayStartDate}
+          />
         </Column>
         <Column>
-          <DatePicker
-            dateFormat="d-m-Y"
-            allowInput={false}
-            datePickerType="single"
-            onChange={(date) => setBirthDayEndDate(dayjs(date[0]).format())}
-            value={birthDayEndDate && dayjs(birthDayEndDate).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput id="endDate" labelText={t('and', 'and')} placeholder="DD-MM-YYYY" size="md" />
-          </DatePicker>
+          <SearchDatePicker
+            id="endDate"
+            labelText={t('and', 'and')}
+            value={birthDayEndDate}
+            onChange={setBirthDayEndDate}
+          />
         </Column>
       </div>
       <SearchButtonSet isLoading={isLoading} onHandleSubmit={submit} onHandleReset={reset} />
