@@ -17,6 +17,16 @@ describe('config schema', () => {
     expect(defaults.omnibar).not.toHaveProperty('drugCriteriaEnabled');
   });
 
+  it('refuses a savedSearchMinCharacters below 1', () => {
+    const [atLeastOne] = configSchema.omnibar.savedSearchMinCharacters._validators;
+    expect([-1, 0, 0.5].map((value) => atLeastOne(value))).toEqual([
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+    ]);
+    expect([1, 2, 10].map((value) => atLeastOne(value))).toEqual([undefined, undefined, undefined]);
+  });
+
   it('ships the demo programs and drug groups the cohort parser understands', () => {
     expect(defaults.omnibar.programs.map((program) => program.label)).toEqual([
       'HIV Care and Treatment',

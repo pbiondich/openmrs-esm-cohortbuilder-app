@@ -21,7 +21,7 @@ import { savedSearchCacheMs, savedSearchDelayMs } from '../saved-search.resource
 import CohortBuilderProvider from './cohort-builder.provider';
 import CohortCriteriaProvider from './cohort-criteria.provider';
 import SavedCohortsProvider from './saved-cohorts.provider';
-import SavedQueriesProvider from './saved-queries.provider';
+import SavedQueriesProvider, { toQueryHits } from './saved-queries.provider';
 
 // A real i18next instance, so plurals and default texts come out as the app shell shows them.
 vi.mock('react-i18next', async () => {
@@ -540,5 +540,82 @@ describe('saved cohorts and saved queries', () => {
     const { last } = renderProvider(SavedQueriesProvider, fresh('art'));
     await settle();
     expect(last()).toEqual({ query: expect.any(String), title: 'Saved queries', status: 'error' });
+  });
+
+  it('skips entries that are not objects and lists the rest', async () => {
+    respond({ results: [null, 'HIV clinic', 42, [], { uuid: cohortUuid, name: 'HIV clinic', size: 3 }] });
+    const { last: lastCohorts } = renderProvider(SavedCohortsProvider, fresh('hiv'));
+    await settle();
+    expect(lastCohorts()).toMatchObject({
+      status: 'ready',
+      results: [expect.objectContaining({ title: 'HIV clinic' })],
+    });
+    expect(lastCohorts().results).toHaveLength(1);
+
+    respond({ results: [null, 'x', { uuid: queryUuid, name: '[AdHocDataExport] HIV clinic' }] });
+    const { last: lastQueries } = renderProvider(SavedQueriesProvider, 'hiv');
+    await settle();
+    expect(lastQueries()).toMatchObject({
+      status: 'ready',
+      results: [expect.objectContaining({ title: 'HIV clinic' })],
+    });
+    expect(lastQueries().results).toHaveLength(1);
+  });
+
+  it.each([
+    ['saved cohorts', SavedCohortsProvider, 'Saved cohorts'],
+    ['saved queries', SavedQueriesProvider, 'Saved queries'],
+  ])(
+    'reports a plain error for %s, never stuck searching, when the answer cannot be read',
+    async (_, Provider, title) => {
+      respond({ results: 'not a list' });
+      const query = fresh('art');
+      const { last } = renderProvider(Provider, query);
+      await settle();
+      expect(last()).toEqual({ query, title, status: 'error' });
+
+      // Not remembered: the next mount asks again.
+      respond({ results: [] });
+      const calls = mockOpenmrsFetch.mock.calls.length;
+      const { last: again } = renderProvider(Provider, query);
+      await settle();
+      expect(mockOpenmrsFetch.mock.calls.length).toBe(calls + 1);
+      expect(again()).toMatchObject({ query, status: 'ready', results: [] });
+    },
+  );
+
+  it('skips saved cohorts and saved queries with no name to show', async () => {
+    respond({
+      results: [
+        { uuid: '2e9f6d2b-0c41-4b7e-9d0b-9f7c3b0d1a11', name: '   ' },
+        { uuid: '3f0a7e3c-1d52-4c8f-8e1c-0a8d4c1e2b22' },
+        { uuid: cohortUuid, name: 'Named' },
+      ],
+    });
+    const { last: lastCohorts } = renderProvider(SavedCohortsProvider, fresh('na'));
+    await settle();
+    expect(lastCohorts().results.map((result) => result.title)).toEqual(['Named']);
+
+    // A saved query whose name is only the prefix can't match typed text, so its mapper is checked directly.
+    expect(
+      toQueryHits({
+        results: [
+          { uuid: '2e9f6d2b-0c41-4b7e-9d0b-9f7c3b0d1a11', name: '[AdHocDataExport]' },
+          { uuid: '3f0a7e3c-1d52-4c8f-8e1c-0a8d4c1e2b22', name: '[AdHocDataExport]   ' },
+          { uuid: queryUuid, name: '[AdHocDataExport] Named' },
+        ],
+      }).map((hit) => hit.name),
+    ).toEqual(['Named']);
+  });
+
+  it('never searches an empty query, even when savedSearchMinCharacters is set below 1', async () => {
+    useTestConfig((config) => ({ ...config, omnibar: { ...config.omnibar, savedSearchMinCharacters: 0 } }));
+    respond({ results: [] });
+    const { last: lastCohorts } = renderProvider(SavedCohortsProvider, '');
+    const { last: lastQueries } = renderProvider(SavedQueriesProvider, '');
+    await settle();
+    expect(lastCohorts()).toMatchObject({ status: 'idle' });
+    expect(lastQueries()).toMatchObject({ status: 'idle' });
+    expect(mockOpenmrsFetch).not.toHaveBeenCalled();
   });
 });
