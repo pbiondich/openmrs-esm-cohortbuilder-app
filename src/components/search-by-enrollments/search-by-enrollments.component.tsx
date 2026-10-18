@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { Column, DatePicker, DatePickerInput, MultiSelect } from '@carbon/react';
 import { showSnackbar } from '@openmrs/esm-framework';
@@ -22,23 +22,27 @@ const SearchByEnrollments: React.FC<SearchByProps> = ({ onSubmit }) => {
   const [selectedPrograms, setSelectedPrograms] = useState<DropdownValue[]>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  if (programsError) {
-    showSnackbar({
-      title: t('error', 'Error'),
-      kind: 'error',
-      isLowContrast: false,
-      subtitle: programsError?.message,
-    });
-  }
+  useEffect(() => {
+    if (programsError) {
+      showSnackbar({
+        title: t('error', 'Error'),
+        kind: 'error',
+        isLowContrast: false,
+        subtitle: programsError?.message,
+      });
+    }
+  }, [programsError, t]);
 
-  if (locationsError) {
-    showSnackbar({
-      title: t('error', 'Error'),
-      kind: 'error',
-      isLowContrast: false,
-      subtitle: locationsError?.message,
-    });
-  }
+  useEffect(() => {
+    if (locationsError) {
+      showSnackbar({
+        title: t('error', 'Error'),
+        kind: 'error',
+        isLowContrast: false,
+        subtitle: locationsError?.message,
+      });
+    }
+  }, [locationsError, t]);
 
   const handleResetInputs = () => {
     setSelectedPrograms(null);
