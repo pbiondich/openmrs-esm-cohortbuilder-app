@@ -445,6 +445,26 @@ describe("a site's own phrases", () => {
     expect(parseCohortCriteria('women or else men', { ...config, phrases })).toBeNull();
   });
 
+  it.each([
+    ['programLinkers', 'patients not HIV program'],
+    ['enrolled', 'except HIV program'],
+    ['drugVerbs', 'patients not ARVs'],
+    ['encounterNouns', 'admission or'],
+    ['programNouns', 'patients in HIV without'],
+    ['under', 'patients or 30'],
+    ['female', 'not women'],
+    ['rangeTo', 'patients 15 or 49'],
+  ] as const)('ignores an added %s phrase holding a negation or an alternative, so %j gives nothing', (list, text) => {
+    const word = text.split(' ').find((token) => englishPhrases.never.includes(token));
+    const phrases = compilePhrases(undefined, { [list]: [word] });
+    expect(parseCohortCriteria(text, { ...config, phrases })).toBeNull();
+  });
+
+  it('ignores an added age group named with a negation', () => {
+    const phrases = compilePhrases(undefined, { ageGroups: [{ phrases: ['not adults'], maxAge: 17 }] });
+    expect(parseCohortCriteria('not adults', { ...config, phrases })).toBeNull();
+  });
+
   it('ignores malformed additions', () => {
     const phrases = compilePhrases(undefined, {
       under: [7 as never, 'x'.repeat(81), 'café <script>'],
