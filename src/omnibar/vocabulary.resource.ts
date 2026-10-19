@@ -7,8 +7,8 @@ import { isPlainObject } from './saved-search.resource';
 
 /**
  * The programs and encounter types the server has, so the cohort parser knows them by name with no
- * config: a program by its name, its concept's names in the user's language and in English (CIEL
- * gives most programs several), and each of those without a trailing "program" or "clinic"; an
+ * config: a program by its name, every name its concept has in any language (CIEL gives most programs
+ * several), and each of those without a trailing "program" or "clinic"; an
  * encounter type by its name. Asked for once per user and language, when the bar first mounts the
  * count row, never per keystroke; the parser itself still makes no request.
  *
@@ -55,18 +55,13 @@ const entriesOf = (data: unknown) =>
 
 /** The answers read defensively: anything that isn't what the parser needs is left out. */
 export function toServerVocabulary(programData: unknown, encounterTypeData: unknown, locale: string): ServerVocabulary {
-  const language = (locale ?? 'en').split(/[-_]/)[0].toLowerCase();
   const programWords = compilePhrases().programNouns.map((noun) => noun.join(' '));
   const programs = entriesOf(programData).map((program) => {
     const label = nameOf(program.name);
     const conceptNames = (
       isPlainObject(program.concept) && Array.isArray(program.concept.names) ? program.concept.names : []
     )
-      .filter((name) => isPlainObject(name) && typeof name.locale === 'string')
-      .filter((name) => {
-        const nameLanguage = String(name.locale).split(/[-_]/)[0].toLowerCase();
-        return nameLanguage === language || nameLanguage === 'en';
-      })
+      .filter(isPlainObject)
       .map((name) => nameOf(name.name))
       .filter(Boolean);
     return {
