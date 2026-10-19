@@ -91,7 +91,7 @@ function renderProvider(
   const rerender = (next: string, nextContext = context, nextHints = hints) =>
     view.rerender(<Provider {...props(next, nextContext, nextHints)} />);
   const last = () => report.mock.calls.at(-1)[0];
-  return { report, rerender, last };
+  return { report, rerender, last, unmount: view.unmount };
 }
 
 const decodeDefinition = (to: string) => {
@@ -436,9 +436,10 @@ describe('CohortCountProvider', () => {
       getSessionStore().setState({ loaded: false, session: null });
     });
     loggedIn('a1b2c3d4-0000-4000-8000-00000000000a');
-    renderProvider(CohortCountProvider, 'women under 30');
+    const { unmount } = renderProvider(CohortCountProvider, 'women under 30');
     await settle();
     expect(requests()).toHaveLength(1);
+    unmount();
 
     loggedIn(null);
     loggedIn('a1b2c3d4-0000-4000-8000-00000000000b');
