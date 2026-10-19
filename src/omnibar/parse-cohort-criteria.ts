@@ -1,4 +1,9 @@
-import { type CohortDrugGroup, type CohortProgram, type ConfigObject } from '../config-schema';
+import {
+  type CohortDrugGroup,
+  type CohortEncounterType,
+  type CohortProgram,
+  type ConfigObject,
+} from '../config-schema';
 import {
   type CohortDefinition,
   type Criterion,
@@ -21,6 +26,8 @@ export interface CohortCriteriaConfig {
   drugCriteriaEnabled: boolean;
   programs: Array<CohortProgram>;
   drugGroups: Array<CohortDrugGroup>;
+  /** Encounter types read as "<alias> encounter". None configured, none understood. */
+  encounterTypes?: Array<CohortEncounterType>;
 }
 
 /** drugCriteriaEnabled says what the server can run, so it sits at the top of the config. */
@@ -29,6 +36,7 @@ export function cohortCriteriaConfig(config: ConfigObject): CohortCriteriaConfig
     drugCriteriaEnabled: config.drugCriteriaEnabled,
     programs: config.omnibar.programs,
     drugGroups: config.omnibar.drugGroups,
+    encounterTypes: config.omnibar.encounterTypes,
   };
 }
 
@@ -40,14 +48,22 @@ const STOPWORDS = new Set([
   'are',
   'build',
   'cohort',
+  'count',
   'currently',
   'everyone',
   'find',
   'for',
   'get',
+  'had',
+  'has',
+  'have',
+  'having',
+  'how',
   'is',
   'list',
+  'many',
   'me',
+  'number',
   'of',
   'patient',
   'patients',
@@ -58,8 +74,11 @@ const STOPWORDS = new Set([
   'show',
   'that',
   'the',
+  'there',
   'those',
+  'total',
   'were',
+  'what',
   'who',
   'whose',
   'with',
@@ -83,12 +102,14 @@ const GENDERS: Record<string, 'male' | 'female'> = {
 const ENROLLED_WORDS = new Set(['enrolled', 'enroled', 'enrollment', 'enrolment']);
 const PROGRAM_WORDS = new Set(['program', 'programs', 'programme', 'programmes']);
 const DRUG_VERBS = new Set(['on', 'taking', 'receiving']);
+const ENCOUNTER_WORDS = new Set(['encounter', 'encounters']);
 
 type Clause =
   | { kind: 'gender'; gender: 'male' | 'female' }
   | { kind: 'age'; minAge?: number; maxAge?: number }
   | { kind: 'program'; program: CohortProgram }
-  | { kind: 'drugGroup'; group: CohortDrugGroup };
+  | { kind: 'drugGroup'; group: CohortDrugGroup }
+  | { kind: 'encounter'; encounterType: CohortEncounterType };
 
 interface Match {
   next: number;
@@ -199,6 +220,17 @@ function matchDrugGroup(tokens: Array<string>, start: number, drugGroups: Array<
   return hit ? { next: hit.next, clause: { kind: 'drugGroup', group: hit.item } } : null;
 }
 
+/** "admission encounter", "vital signs encounters". The word "encounter" is required: "admission" alone is too vague. */
+function matchEncounter(
+  tokens: Array<string>,
+  start: number,
+  encounterTypes: Array<CohortEncounterType>,
+): Match | null {
+  const hit = longestAlias(tokens, start, encounterTypes);
+  if (!hit || !ENCOUNTER_WORDS.has(tokens[hit.next])) return null;
+  return { next: hit.next + 1, clause: { kind: 'encounter', encounterType: hit.item } };
+}
+
 function describeAge(minAge?: number, maxAge?: number): string | null {
   if (minAge != null && maxAge != null) return minAge === maxAge ? `aged ${minAge}` : `aged ${minAge}–${maxAge}`;
   if (minAge != null) return `aged ${minAge}+`;
@@ -221,6 +253,7 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   let maxAge: number | undefined;
   const programs: Array<CohortProgram> = [];
   const drugGroups: Array<CohortDrugGroup> = [];
+  const encounterTypes: Array<CohortEncounterType> = [];
 
   const configuredDrugGroups = config.drugCriteriaEnabled ? config.drugGroups ?? [] : [];
 
@@ -234,7 +267,8 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
       matchGender(tokens, i) ??
       matchAge(tokens, i) ??
       matchProgram(tokens, i, config.programs ?? []) ??
-      matchDrugGroup(tokens, i, configuredDrugGroups);
+      matchDrugGroup(tokens, i, configuredDrugGroups) ??
+      matchEncounter(tokens, i, config.encounterTypes ?? []);
     if (!match) return null;
 
     const { clause } = match;
@@ -247,8 +281,10 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
       maxAge = clause.maxAge ?? maxAge;
     } else if (clause.kind === 'program') {
       if (!programs.includes(clause.program)) programs.push(clause.program);
-    } else if (!drugGroups.includes(clause.group)) {
-      drugGroups.push(clause.group);
+    } else if (clause.kind === 'drugGroup') {
+      if (!drugGroups.includes(clause.group)) drugGroups.push(clause.group);
+    } else if (!encounterTypes.includes(clause.encounterType)) {
+      encounterTypes.push(clause.encounterType);
     }
     i = match.next;
   }
@@ -264,7 +300,7 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   if (minAge === 0 && maxAge == null) {
     minAge = undefined;
   }
-  if (!programs.every((program) => isUuid(program.uuid))) {
+  if (![...programs, ...encounterTypes].every((item) => isUuid(item.uuid))) {
     return null;
   }
   // A group without Drug uuids (or with too many) can't become a drug order search, so nothing is offered.
@@ -291,6 +327,9 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   for (const group of drugGroups) {
     criteria.push({ type: 'drugOrder', drugs: [...group.drugUuids], activeOnOrAfter: 'today' });
   }
+  for (const encounterType of encounterTypes) {
+    criteria.push({ type: 'encounter', encounterTypes: [encounterType.uuid] });
+  }
   if (!criteria.length || criteria.length > MAX_CRITERIA) {
     return null;
   }
@@ -300,6 +339,7 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
     describeAge(minAge, maxAge),
     ...programs.map((program) => `in ${program.label}`),
     ...drugGroups.map((group) => `on ${group.label}`),
+    ...encounterTypes.map((encounterType) => `with ${encounterType.label} encounters`),
   ]
     .filter(Boolean)
     .join(' ');

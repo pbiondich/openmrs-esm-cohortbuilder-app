@@ -143,6 +143,19 @@ export const configSchema = {
       },
       _default: COHORT_DRUG_GROUPS_DEFAULT,
     },
+    encounterTypes: {
+      _type: Type.Array,
+      _description:
+        'Encounter types the omnibar\'s cohort row understands, as in "patients with an admission encounter". ' +
+        'The word "encounter" is needed after the alias. Encounter type uuids are site content, so none ship.',
+      _elements: {
+        _type: Type.Object,
+        uuid: { _type: Type.UUID, _description: 'The encounter type uuid.' },
+        label: { _type: Type.String, _description: 'Shown in the cohort description.' },
+        aliases: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      },
+      _default: [],
+    },
   },
 };
 
@@ -160,6 +173,12 @@ export interface CohortDrugGroup {
   cielConceptUuids: Array<string>;
 }
 
+export interface CohortEncounterType {
+  uuid: string;
+  label: string;
+  aliases: Array<string>;
+}
+
 export interface ConfigObject {
   drugOrderSearchDefinitionKey: string;
   drugCriteriaEnabled: boolean;
@@ -168,5 +187,6 @@ export interface ConfigObject {
     savedSearchMinCharacters: number;
     programs: Array<CohortProgram>;
     drugGroups: Array<CohortDrugGroup>;
+    encounterTypes: Array<CohortEncounterType>;
   };
 }
