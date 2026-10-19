@@ -41,6 +41,8 @@ export interface CohortCriteriaConfig {
   phrases?: CompiledPhrases;
 }
 
+const isObject = (value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value);
+
 /** drugCriteriaEnabled says what the server can run, so it sits at the top of the config. */
 export function cohortCriteriaConfig(config: ConfigObject): CohortCriteriaConfig {
   return {
@@ -48,7 +50,10 @@ export function cohortCriteriaConfig(config: ConfigObject): CohortCriteriaConfig
     programs: config.omnibar.programs,
     drugGroups: config.omnibar.drugGroups,
     encounterTypes: config.omnibar.encounterTypes,
-    phrases: compilePhrases(undefined, (config.omnibar.phrases ?? undefined) as PhraseAdditions | undefined),
+    phrases: compilePhrases(
+      undefined,
+      isObject(config.omnibar.phrases) ? (config.omnibar.phrases as PhraseAdditions) : undefined,
+    ),
   };
 }
 

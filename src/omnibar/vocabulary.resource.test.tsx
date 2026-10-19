@@ -4,6 +4,7 @@ import { type FetchResponse, getSessionStore, openmrsFetch } from '@openmrs/esm-
 import { type CohortCriteriaConfig, parseCohortCriteria } from './parse-cohort-criteria';
 import {
   forgetServerVocabulary,
+  hasServerVocabulary,
   mergeVocabulary,
   toServerVocabulary,
   useServerVocabulary,
