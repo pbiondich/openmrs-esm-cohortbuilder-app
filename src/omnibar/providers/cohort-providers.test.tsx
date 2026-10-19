@@ -448,6 +448,28 @@ describe('CohortCountProvider', () => {
     expect(requests()).toHaveLength(2);
   });
 
+  it('drops an answer asked for by the user before, and asks again for the one logged in now', async () => {
+    const loggedIn = (uuid: string) =>
+      getSessionStore().setState({ loaded: true, session: { authenticated: true, user: { uuid } } as never });
+    onTestFinished(() => {
+      getSessionStore().setState({ loaded: false, session: null });
+    });
+    loggedIn('a1b2c3d4-0000-4000-8000-00000000000a');
+    let answerFirst: (value: unknown) => void;
+    mockOpenmrsFetch.mockImplementationOnce(() => new Promise((resolve) => (answerFirst = resolve)));
+    const { last } = renderProvider(CohortCountProvider, 'women under 30');
+    await settle();
+    expect(requests()).toHaveLength(1);
+
+    loggedIn('a1b2c3d4-0000-4000-8000-00000000000b');
+    await act(async () => answerFirst({ data: { result: { memberIds: [1, 2, 3, 4, 5, 6, 7] } } }));
+    expect(last().results[0].title).toBe('Counting…');
+    expect(requests()).toHaveLength(2);
+    await settle(0);
+    expect(last()).toMatchObject({ status: 'ready' });
+    expect(last().results[0].title).toBe('3 patients');
+  });
+
   it('counts again on another day, since ages and "today" move', async () => {
     renderProvider(CohortCountProvider, 'women under 30').rerender('women under 30');
     await settle();
