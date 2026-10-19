@@ -64,6 +64,8 @@ function testConfig(): ConfigObject {
       programs: [{ uuid: hiv, label: 'HIV Program', aliases: ['hiv'] }],
       drugGroups: [{ id: 'arv', label: 'ARVs', aliases: ['arvs'], drugUuids: [tdf], cielConceptUuids: [] }],
       encounterTypes: [{ uuid: admission, label: 'Admission', aliases: ['admission'] }],
+      // Its own tests are in vocabulary.resource.test.tsx and below; off here, so requests are only counts.
+      serverVocabulary: false,
     },
   };
 }
@@ -349,6 +351,30 @@ describe('CohortCountProvider', () => {
         parameterValues: { encounterTypeList: [admission] },
       }),
     ]);
+  });
+
+  it("counts a program known only from the server's own list, once the row may answer", async () => {
+    const malaria = '7d2e3f40-1111-4222-8333-444455556666';
+    useTestConfig((config) => ({ ...config, omnibar: { ...config.omnibar, serverVocabulary: true } }));
+    mockOpenmrsFetch.mockImplementation(async (url: string) => {
+      if (url.includes('/program?')) {
+        return { data: { results: [{ uuid: malaria, name: 'Malaria Program', retired: false }] } } as FetchResponse;
+      }
+      if (url.includes('/encountertype?')) return { data: { results: [] } } as FetchResponse;
+      return { data: { count: 12 } } as FetchResponse;
+    });
+    const { rerender, last } = renderProvider(CohortCountProvider, '100GEJ', global, { looksLikeIdentifier: true });
+    await settle(0);
+    // A patient identifier never mounts the vocabulary request.
+    expect(mockOpenmrsFetch).not.toHaveBeenCalled();
+
+    rerender('how many patients are enrolled in malaria?', global, { looksLikeIdentifier: false });
+    await settle(0);
+    rerender('how many patients are enrolled in malaria', global, { looksLikeIdentifier: false });
+    expect(last().results[0]).toMatchObject({ title: 'Counting…', subtitle: 'Patients enrolled in Malaria Program' });
+    await settle();
+    expect(last().results[0].title).toBe('12 patients');
+    expect(requests().filter(({ url }) => url.pathname.endsWith('/program'))).toHaveLength(1);
   });
 
   it('formats the count for the locale the host gives', async () => {

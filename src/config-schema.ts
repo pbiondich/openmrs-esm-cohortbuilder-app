@@ -105,6 +105,14 @@ export const configSchema = {
         'query is never searched.',
       _validators: [validator((value: number) => value >= 1, 'Must be at least 1.')],
     },
+    serverVocabulary: {
+      _type: Type.Boolean,
+      _default: true,
+      _description:
+        'Let the cohort row know the programs and encounter types on the server by name, with the names of each ' +
+        "program's concept in the user's language and English, besides those in programs and encounterTypes. " +
+        'Asked for once per user when the row is first allowed to answer, never per keystroke. Off, only config is known.',
+    },
     countDebounceMs: {
       _type: Type.Number,
       _default: 600,
@@ -238,6 +246,7 @@ export interface ConfigObject {
   omnibar: {
     enabled: boolean;
     savedSearchMinCharacters: number;
+    serverVocabulary: boolean;
     countDebounceMs: number;
     programs: Array<CohortProgram>;
     drugGroups: Array<CohortDrugGroup>;

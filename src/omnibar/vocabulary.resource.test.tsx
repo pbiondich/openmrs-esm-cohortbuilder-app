@@ -60,6 +60,9 @@ function answerAsServer() {
   });
 }
 
+/** Lets the hook's requests answer and its state settle. */
+const flush = () => act(() => Promise.resolve());
+
 const loggedIn = (uuid: string) =>
   getSessionStore().setState({ loaded: true, session: { authenticated: true, user: { uuid } } as never });
 
@@ -154,12 +157,12 @@ describe('the server vocabulary', () => {
   });
 
   it('asks the server once per user, for uuids, names and concept names only', async () => {
-    const first = renderHook(() => useServerVocabulary(true, 'en'));
-    expect(first.result.current).toBeNull();
-    await act(async () => {});
-    expect(first.result.current.programs).toHaveLength(3);
+    const view = renderHook(() => useServerVocabulary(true, 'en'));
+    expect(view.result.current).toBeNull();
+    await flush();
+    expect(view.result.current.programs).toHaveLength(3);
     renderHook(() => useServerVocabulary(true, 'en'));
-    await act(async () => {});
+    await flush();
 
     const urls = mockOpenmrsFetch.mock.calls.map(([url]) => new URL(url, 'http://localhost'));
     expect(urls.map(({ pathname }) => pathname.split('/').at(-1))).toEqual(['program', 'encountertype']);
@@ -169,13 +172,13 @@ describe('the server vocabulary', () => {
 
     loggedIn('a1b2c3d4-0000-4000-8000-00000000000b');
     renderHook(() => useServerVocabulary(true, 'en'));
-    await act(async () => {});
+    await flush();
     expect(mockOpenmrsFetch).toHaveBeenCalledTimes(4);
   });
 
   it('asks nothing while turned off', async () => {
     const { result } = renderHook(() => useServerVocabulary(false, 'en'));
-    await act(async () => {});
+    await flush();
     expect(result.current).toBeNull();
     expect(mockOpenmrsFetch).not.toHaveBeenCalled();
   });
@@ -185,14 +188,14 @@ describe('the server vocabulary', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     onTestFinished(() => error.mockRestore());
     const { result } = renderHook(() => useServerVocabulary(true, 'en'));
-    await act(async () => {});
+    await flush();
     expect(result.current).toEqual({ programs: [], encounterTypes: [] });
     expect(error).not.toHaveBeenCalled();
 
     answerAsServer();
-    const again = renderHook(() => useServerVocabulary(true, 'en'));
-    await act(async () => {});
-    expect(again.result.current.programs).toHaveLength(3);
+    const { result: retried } = renderHook(() => useServerVocabulary(true, 'en'));
+    await flush();
+    expect(retried.current.programs).toHaveLength(3);
   });
 
   it('keeps one list when only one of the two answers', async () => {
@@ -201,7 +204,7 @@ describe('the server vocabulary', () => {
       throw Object.assign(new Error('Forbidden'), { response: { status: 403 } });
     });
     const { result } = renderHook(() => useServerVocabulary(true, 'en'));
-    await act(async () => {});
+    await flush();
     expect(result.current.programs).toHaveLength(3);
     expect(result.current.encounterTypes).toEqual([]);
   });
