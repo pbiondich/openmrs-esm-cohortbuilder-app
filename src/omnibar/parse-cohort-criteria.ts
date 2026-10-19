@@ -365,13 +365,6 @@ const isAge = (value: number | undefined) =>
 const joiners = new Set(['and', 'with']);
 const isPopulation = (clause: Clause) => clause.kind === 'gender' || (clause.kind === 'age' && clause.group);
 
-/** Whether a named age group's phrase is exactly the words from `start` to `next`, as "under 5" is. */
-const namesAgeGroup = (tokens: Array<string>, start: number, next: number, P: CompiledPhrases) =>
-  P.ageGroups.some(
-    ({ tokens: words }) =>
-      start + words.length === next && words.every((word, offset) => tokens[start + offset] === word),
-  );
-
 export function parseCohortCriteria(text: string, config: CohortCriteriaConfig): CohortDefinition | null {
   const P = config.phrases ?? compilePhrases();
   // A comma is skipped wherever it stands, within a phrase or a name too, but joins two populations as
@@ -400,12 +393,19 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
 
   const configuredDrugGroups = config.drugCriteriaEnabled ? config.drugGroups ?? [] : [];
 
-  // Whether a gender or a named age group was read, and "and" or "with" skipped after one.
+  // Whether a gender or a named age group was read, and "and", "with" or a comma came after one, at any
+  // distance or right after it.
   let population = false;
   let joined = false;
+  let joinedToPopulation = false;
+  let lastWasPopulation = false;
+  const join = () => {
+    joined ||= population;
+    joinedToPopulation ||= lastWasPopulation;
+  };
   let i = 0;
   while (i < tokens.length) {
-    joined ||= population && afterComma.has(i);
+    if (afterComma.has(i)) join();
     // Criteria before stopwords, so "at least" is read before "at" could be skipped, and the reading
     // that takes the most words, so "women of reproductive age" is one age group, not "women".
     const match = [
@@ -421,20 +421,18 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
     if (!match) {
       const stopword = matchPhrase(tokens, i, P.stopwords);
       if (stopword === null) return null;
-      joined ||= population && tokens.slice(i, stopword).some((token) => joiners.has(token));
+      if (tokens.slice(i, stopword).some((token) => joiners.has(token))) join();
       i = stopword;
       continue;
     }
 
     const { clause } = match;
     // "women and children", or "women under 30 and children", asks about two populations, so it never
-    // counts the girls they share.
-    if (isPopulation(clause)) {
-      if (joined) return null;
-      population = true;
-    }
-    // "women and under 5": read as a bound, "under 5" is still the named group, a second population.
-    if (joined && clause.kind === 'age' && namesAgeGroup(tokens, i, match.next, P)) return null;
+    // counts the girls they share. "women and under 5" may too, so any age right after one is refused.
+    if ((joined && isPopulation(clause)) || (joinedToPopulation && clause.kind === 'age')) return null;
+    lastWasPopulation = isPopulation(clause);
+    population ||= lastWasPopulation;
+    joinedToPopulation = false;
     if (clause.kind === 'gender' || (clause.kind === 'age' && clause.gender)) {
       if (gender && gender !== clause.gender) return null;
       gender = clause.gender;
