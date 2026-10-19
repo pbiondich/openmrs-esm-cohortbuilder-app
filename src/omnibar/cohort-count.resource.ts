@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { openmrsFetch, restBaseUrl } from '@openmrs/esm-framework';
+import { getSessionStore, openmrsFetch, restBaseUrl } from '@openmrs/esm-framework';
 import type { Query } from '../types';
 import { isUuid } from '../url-definition/url-definition';
 import { isServerUnreachable } from './omnibar-contract';
@@ -10,8 +10,10 @@ import { isPlainObject } from './saved-search.resource';
  * that is one program enrollment search asks reportingrest's evaluated cohort resource for its `ref`
  * representation, which carries the count and no members. Anything else is evaluated as the ad hoc
  * query the builder would run, with `v=rowFilters` and no columns: reportingrest then returns the
- * matching ids without evaluating any data for them, and the count is how many there are. reportingrest
- * has no count-only evaluation for a composition yet.
+ * matching ids without evaluating any data for them, and the count is how many there are. Those ids,
+ * internal patient ids for the composition and for each of its filters, do reach the browser, though
+ * only their number is read: reportingrest has no count-only evaluation for a composition yet, and
+ * `v=count` is proposed for it (the cohort counts brief, step 5).
  *
  * The enrollment search is the one built-in definition whose other parameters are optional, so a GET
  * can leave them out; the age and encounter definitions require every parameter on a GET.
@@ -68,8 +70,29 @@ export async function countCohort(query: Query, signal?: AbortSignal): Promise<n
 const maxCachedCounts = 50;
 // For the session: a count is asked for once per key. The key carries the day, since ages and "today" move.
 const counts = new Map<string, number>();
+let countsUser: string | undefined;
 
-function remember(key: string, count: number) {
+/** Who is logged in now, from the framework's session store; never suspends, unlike useSession. */
+const currentUser = (): string | undefined => getSessionStore().getState().session?.user?.uuid;
+
+/**
+ * The counts remembered for whoever is logged in now. Another user, or none, starts afresh: a logout
+ * without a page load leaves this module loaded, and one user's counts are theirs alone.
+ */
+function rememberedCounts(): Map<string, number> {
+  const user = currentUser();
+  if (user !== countsUser) {
+    counts.clear();
+    countsUser = user;
+  }
+  return counts;
+}
+
+function remember(key: string, count: number, askedBy: string | undefined) {
+  const counts = rememberedCounts();
+  if (askedBy !== countsUser) {
+    return;
+  }
   counts.delete(key);
   counts.set(key, count);
   if (counts.size > maxCachedCounts) {
@@ -96,7 +119,7 @@ const settled = (key: string | null, count?: number): CohortCountState => ({
 
 /** Settled with the remembered count, or loading for a key not yet counted. */
 const initial = (key: string | null) =>
-  key && counts.has(key) ? settled(key, counts.get(key)) : { ...settled(key), loading: Boolean(key) };
+  key && rememberedCounts().has(key) ? settled(key, counts.get(key)) : { ...settled(key), loading: Boolean(key) };
 
 /**
  * The count of `query`, asked for once the same `key` has been in place for `delayMs`, so the server
@@ -109,7 +132,7 @@ export function useCohortCount(key: string | null, query: Query | null, delayMs:
   queryRef.current = query;
 
   useEffect(() => {
-    if (!key || !queryRef.current || counts.has(key)) {
+    if (!key || !queryRef.current || rememberedCounts().has(key)) {
       setState(initial(key));
       return;
     }
@@ -117,10 +140,11 @@ export function useCohortCount(key: string | null, query: Query | null, delayMs:
     setState(initial(key));
     const controller = new AbortController();
     const timer = setTimeout(() => {
+      const askedBy = currentUser();
       countCohort(queryRef.current, controller.signal).then(
         (count) => {
           if (controller.signal.aborted) return;
-          remember(key, count);
+          remember(key, count, askedBy);
           setState(settled(key, count));
         },
         (error: unknown) => {
