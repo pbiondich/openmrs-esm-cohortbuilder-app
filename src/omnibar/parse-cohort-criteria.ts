@@ -374,9 +374,16 @@ const namesAgeGroup = (tokens: Array<string>, start: number, next: number, P: Co
 
 export function parseCohortCriteria(text: string, config: CohortCriteriaConfig): CohortDefinition | null {
   const P = config.phrases ?? compilePhrases();
-  const tokens = tokenize(text);
+  // A comma is skipped wherever it stands, within a phrase or a name too, but joins two populations as
+  // "and" does: "women, children" is two.
+  const tokens: Array<string> = [];
+  const afterComma = new Set<number>();
+  for (const token of tokenize(text, true) ?? []) {
+    if (token === ',') afterComma.add(tokens.length);
+    else tokens.push(token);
+  }
   // A cohort needs at least one word: "50+" or "15-49" on their own could be anything.
-  if (!tokens?.some((token) => /\p{L}/u.test(token))) {
+  if (!tokens.some((token) => /\p{L}/u.test(token))) {
     return null;
   }
 
@@ -398,6 +405,7 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   let joined = false;
   let i = 0;
   while (i < tokens.length) {
+    joined ||= population && afterComma.has(i);
     // Criteria before stopwords, so "at least" is read before "at" could be skipped, and the reading
     // that takes the most words, so "women of reproductive age" is one age group, not "women".
     const match = [
