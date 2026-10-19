@@ -539,7 +539,7 @@ function readClauses(
   config: CohortCriteriaConfig,
   P: CompiledPhrases,
   afterComma: Set<number> = new Set(),
-): { matches: Array<Match & { joined: boolean }> } | { unreadAt: number } {
+): { matches: Array<Match & { joined: boolean }> } | { unreadAt: number; matched: number } {
   const configuredDrugGroups = config.drugCriteriaEnabled ? config.drugGroups ?? [] : [];
   const matches: Array<Match & { joined: boolean }> = [];
   let joined = false;
@@ -566,7 +566,7 @@ function readClauses(
       continue;
     }
     const stopword = matchPhrase(tokens, i, P.stopwords);
-    if (stopword === null) return { unreadAt: i };
+    if (stopword === null) return { unreadAt: i, matched: matches.length };
     if (tokens.slice(i, stopword).some((token) => joiners.has(token))) joined = true;
     i = stopword;
   }
@@ -586,7 +586,9 @@ export function unreadWords(text: string, config: CohortCriteriaConfig): string 
   if (!tokens?.length) return null;
   const read = readClauses(tokens, config, P);
   if (!('unreadAt' in read)) return null;
-  const start = read.unreadAt;
+  // A result word that came before the name ("latest vir") is the user's, not the name's.
+  const resultWord = longestOf(tokens, read.unreadAt, testResults, P);
+  const start = resultWord?.next ?? read.unreadAt;
   let end = start;
   while (
     end < tokens.length &&
@@ -599,10 +601,11 @@ export function unreadWords(text: string, config: CohortCriteriaConfig): string 
   }
   const words = tokens.slice(start, end);
   if (!words.length || words.length > 6 || !words.some((word) => /\p{L}/u.test(word))) return null;
-  // Only words that could be a test: a comparison follows them, or they are still being typed after
-  // other words. So "Mary Achieng" is never looked up, and neither is a window with no comparison.
+  // Only words that could be a test: a comparison follows them, or they are still being typed after a
+  // criterion or a result word ("women with vir", "latest vir"). Stopwords alone aren't enough, so
+  // "patients with Mary Achieng" never sends a patient's name to concept search.
   const compared = end < tokens.length && Boolean(longestOf(tokens, end, testComparisons, P));
-  const beingTyped = end === tokens.length && start > 0;
+  const beingTyped = end === tokens.length && (read.matched > 0 || resultWord !== null);
   if (!compared && !beingTyped) return null;
   // Put back what the tokenizer split: "cd4", not "cd 4", when that is how it was typed.
   const typed = text.normalize('NFKC').toLowerCase();
