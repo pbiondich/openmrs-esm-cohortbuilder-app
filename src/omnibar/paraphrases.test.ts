@@ -715,6 +715,11 @@ describe('test results', () => {
     ['women not on ARVs', null],
     ['123456', null],
     ['patients with b c d e f g h over 2', null],
+    // Only words that could be a test: followed by a comparison, or being typed after other words.
+    ['Mary Achieng', null],
+    ['viral load', null],
+    ['patients with viral load since', null],
+    ['vl > 1000', 'vl'],
   ])('gives the words to look up in %j as %j', (text, words) => {
     expect(unreadWords(text, config)).toBe(words);
   });
