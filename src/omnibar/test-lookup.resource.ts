@@ -103,7 +103,7 @@ function remember(words: string, locale: string, tests: Array<CohortTest>, asked
  * lookup lands, so a caller reading `knownTests` knows to read again. A failed lookup is forgotten,
  * so the same words are asked again on the next try.
  */
-export function useTestLookup(words: string | null, enabled: boolean, locale: string): number {
+export function useTestLookup(words: string | null, enabled: boolean, locale: string, onLanded?: () => void): number {
   const [landed, setLanded] = useState(0);
 
   useEffect(() => {
@@ -116,6 +116,7 @@ export function useTestLookup(words: string | null, enabled: boolean, locale: st
           if (controller.signal.aborted) return;
           remember(words, locale, toTests(data, locale), askedBy);
           setLanded((count) => count + 1);
+          onLanded?.();
         },
         () => {
           // Nothing is remembered, so the next try asks again; the row meanwhile offers nothing.
@@ -126,7 +127,7 @@ export function useTestLookup(words: string | null, enabled: boolean, locale: st
       clearTimeout(timer);
       controller.abort();
     };
-  }, [words, enabled, locale]);
+  }, [words, enabled, locale, onLanded]);
 
   return landed;
 }
