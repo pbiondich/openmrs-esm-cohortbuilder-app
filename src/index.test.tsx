@@ -15,7 +15,7 @@ import {
   withProviderBoundary,
 } from './omnibar/omnibar-contract';
 import CohortBuilderProvider from './omnibar/providers/cohort-builder.provider';
-import CohortCriteriaProvider from './omnibar/providers/cohort-criteria.provider';
+import CohortCountProvider from './omnibar/providers/cohort-count.provider';
 import SavedCohortsProvider from './omnibar/providers/saved-cohorts.provider';
 import SavedQueriesProvider from './omnibar/providers/saved-queries.provider';
 import { savedSearchDelayMs } from './omnibar/saved-search.resource';
@@ -25,7 +25,7 @@ import { savedSearchDelayMs } from './omnibar/saved-search.resource';
 const indexSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'index.ts'), 'utf8');
 
 const providerModules = {
-  'omnibar-cohort-criteria-provider': ['cohort-criteria', CohortCriteriaProvider],
+  'omnibar-cohort-count-provider': ['cohort-count', CohortCountProvider],
   'omnibar-cohort-builder-provider': ['cohort-builder', CohortBuilderProvider],
   'omnibar-saved-cohorts-provider': ['saved-cohorts', SavedCohortsProvider],
   'omnibar-saved-queries-provider': ['saved-queries', SavedQueriesProvider],
@@ -127,15 +127,16 @@ describe('with the cohort providers registered as shipped', () => {
     expect(rows).toEqual([]);
   });
 
-  it('offers exactly one navigate row for cohort text, with nothing fetched for it', async () => {
+  it('offers exactly one navigate row for cohort text, counting, with nothing fetched for it yet', async () => {
     const { reports, rows } = await host('women aged 15-49');
     expect(rows).toEqual([
       expect.objectContaining({
-        title: 'Build cohort: Female patients aged 15–49',
+        title: 'Counting…',
+        subtitle: 'Female Patients with ages between 15 and 49 years that are alive',
         target: { type: 'navigate', to: expect.stringMatching(/^\$\{openmrsSpaBase\}\/cohort-builder\?definition=/) },
       }),
     ]);
-    expect(reports.get('omnibar-cohort-criteria-provider').status).toBe('ready');
+    expect(reports.get('omnibar-cohort-count-provider').status).toBe('loading');
     expect(mockOpenmrsFetch.mock.calls.map(([url]) => String(url)).filter((url) => url.includes('adhocquery'))).toEqual(
       [],
     );
@@ -150,7 +151,7 @@ describe('with the cohort providers registered as shipped', () => {
     expect([...reports.values()].map(({ status, title }) => [status, title])).toEqual(
       providerExtensions.map(() => ['error', 'Results']),
     );
-    expect(error).toHaveBeenCalledWith('Omnibar provider omnibar-cohort-criteria-provider failed with Error');
+    expect(error).toHaveBeenCalledWith('Omnibar provider omnibar-cohort-count-provider failed with Error');
     error.mockRestore();
   });
 });
