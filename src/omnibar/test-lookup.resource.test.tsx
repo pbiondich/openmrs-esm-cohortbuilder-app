@@ -50,7 +50,7 @@ describe('looking up a test by name', () => {
   });
 
   it('keeps numeric concepts, with every name and synonym they have in any language, and their units', () => {
-    expect(toTests(answer, 'fr_FR')).toEqual([
+    expect(toTests(answer)).toEqual([
       {
         uuid: viralLoad,
         label: 'HIV viral load',
@@ -59,34 +59,31 @@ describe('looking up a test by name', () => {
       },
       { uuid: hepB, label: 'Hepatitis B viral load', aliases: [], units: 'IU/mL' },
     ]);
-    expect(toTests(null, 'en')).toEqual([]);
+    expect(toTests(null)).toEqual([]);
   });
 
   it('also knows a name without the unit in brackets at its end, as CIEL writes "Weight (kg)"', () => {
     const weight = '5089AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     const creatinine = '790AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     expect(
-      toTests(
-        {
-          results: [
-            {
-              uuid: weight,
-              display: 'Weight (kg)',
-              units: 'kg',
-              datatype: { hl7Abbreviation: 'NM' },
-              names: [{ name: 'WT', locale: 'en' }],
-            },
-            {
-              uuid: creatinine,
-              display: 'Serum creatinine (umol/L)',
-              units: 'umol/L',
-              datatype: { hl7Abbreviation: 'NM' },
-              names: [{ name: 'Cr', locale: 'en' }],
-            },
-          ],
-        },
-        'en',
-      ),
+      toTests({
+        results: [
+          {
+            uuid: weight,
+            display: 'Weight (kg)',
+            units: 'kg',
+            datatype: { hl7Abbreviation: 'NM' },
+            names: [{ name: 'WT', locale: 'en' }],
+          },
+          {
+            uuid: creatinine,
+            display: 'Serum creatinine (umol/L)',
+            units: 'umol/L',
+            datatype: { hl7Abbreviation: 'NM' },
+            names: [{ name: 'Cr', locale: 'en' }],
+          },
+        ],
+      }),
     ).toEqual([
       { uuid: weight, label: 'Weight (kg)', aliases: ['Weight', 'WT'], units: 'kg' },
       { uuid: creatinine, label: 'Serum creatinine (umol/L)', aliases: ['Serum creatinine', 'Cr'], units: 'umol/L' },

@@ -34,7 +34,7 @@ function withoutBracketedEnd(name: string | null): string | null {
 }
 
 /** The numeric concepts in a concept search answer, read defensively. */
-export function toTests(data: unknown, _locale?: string): Array<CohortTest> {
+export function toTests(data: unknown): Array<CohortTest> {
   const results = isPlainObject(data) && Array.isArray(data.results) ? data.results : [];
   return results.flatMap((concept) => {
     if (!isPlainObject(concept) || !isUuid(concept.uuid)) return [];
@@ -122,7 +122,7 @@ export function useTestLookup(words: string | null, enabled: boolean, locale: st
       openmrsFetch<unknown>(lookupUrl(words), { signal: controller.signal }).then(
         ({ data }) => {
           if (controller.signal.aborted) return;
-          remember(words, locale, toTests(data, locale), askedBy);
+          remember(words, locale, toTests(data), askedBy);
           setLanded((count) => count + 1);
           onLanded?.();
         },
