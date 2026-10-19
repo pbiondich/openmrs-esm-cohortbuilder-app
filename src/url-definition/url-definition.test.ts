@@ -9,6 +9,7 @@ import {
   toQueryDate,
   validateDefinition,
   type CohortDefinition,
+  type NumericObsCriterion,
 } from './url-definition';
 import goldenFixtures from '../omnibar/golden-fixtures.json';
 
@@ -586,5 +587,114 @@ describe('golden contract fixtures', () => {
     const encoded = encodeDefinition(definition as CohortDefinition);
     expect(encoded).toBe(new URLSearchParams(url.split('?')[1]).get('definition'));
     expect(decodeDefinition(encoded).criteria).toEqual(definition.criteria);
+  });
+});
+
+describe('test results in a link', () => {
+  const viralLoad = '856AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const withTest = (criterion: unknown) => ({ v: 1, criteria: [criterion] });
+  const test = (overrides: object = {}) =>
+    ({ type: 'numericObs', concept: viralLoad, operator: 'gt', value: 1000, ...overrides } as NumericObsCriterion);
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-19T15:30:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ['the latest by default', test()],
+    ['another result', test({ which: 'lowest' })],
+    ['a decimal', test({ operator: 'le', value: 49.5 })],
+    ['zero', test({ operator: 'eq', value: 0 })],
+    ['a negative number', test({ operator: 'lt', value: -2.5 })],
+    ['months back', test({ withinLastMonths: 6 })],
+    ['days back', test({ withinLastDays: 90 })],
+    ['months and days back', test({ withinLastMonths: 1, withinLastDays: 15 })],
+    ['a start date', test({ onOrAfter: '2025-01-01' })],
+  ])('accepts %s', (_, criterion) => {
+    expect(validateDefinition(withTest(criterion)).criteria[0]).toEqual(criterion);
+  });
+
+  it.each([
+    ['a concept that is not a uuid', test({ concept: 'viral load' }), '"concept" must be a uuid'],
+    ['a definition library key', test({ concept: 'reporting.library.cohortDefinition.builtIn.males' }), '"concept"'],
+    ['an operator by its reporting name', test({ operator: 'GREATER_THAN' }), '"operator" must be'],
+    ['an unknown operator', test({ operator: 'between' }), '"operator" must be'],
+    ['a value as text', test({ value: '1000' }), '"value" must be a number'],
+    ['no value', test({ value: undefined }), '"value" must be a number'],
+    ['an infinite value', test({ value: 1e400 }), '"value" must be a number'],
+    ['a huge value', test({ value: 1e13 }), '"value" must be a number'],
+    ['an unknown result', test({ which: 'median' }), '"which" must be'],
+    ['months as text', test({ withinLastMonths: '6' }), '"withinLastMonths" must be a whole number'],
+    ['zero months', test({ withinLastMonths: 0 }), '"withinLastMonths" must be a whole number'],
+    ['fractional days', test({ withinLastDays: 1.5 }), '"withinLastDays" must be a whole number'],
+    ['too many months', test({ withinLastMonths: 241 }), '"withinLastMonths" must be a whole number'],
+    ['a window and a start date', test({ withinLastMonths: 6, onOrAfter: '2025-01-01' }), 'not both'],
+    ['a start date that does not exist', test({ onOrAfter: '2025-02-30' }), '"onOrAfter" must be a date'],
+    ['an unknown key', test({ units: 'copies/mL' }), 'unknown key "units"'],
+  ])('rejects %s', (_, criterion, message) => {
+    expect(() => validateDefinition(withTest(criterion))).toThrow(message);
+  });
+
+  const tests = new Map([[viralLoad, { name: 'HIV viral load', units: 'copies/mL', hl7Abbrev: 'NM' }]]);
+
+  it("searches as the Concepts tab does, in the concept's units, and says so", () => {
+    const search = buildSearch(test(), new Map(), 'k', tests);
+    expect(search.searchParams.query.rowFilters).toEqual([
+      expect.objectContaining({
+        key: 'reporting.library.cohortDefinition.builtIn.numericObsSearchAdvanced',
+        parameterValues: { timeModifier: 'LAST', question: viralLoad, operator1: 'GREATER_THAN', value1: '1000' },
+      }),
+    ]);
+    expect(search.description).toBe('Patients with most recent HIV viral load > 1000 copies/mL');
+  });
+
+  it.each([
+    ['latest', 'LAST', 'most recent'],
+    ['first', 'FIRST', 'earliest'],
+    ['lowest', 'MIN', 'lowest'],
+    ['highest', 'MAX', 'highest'],
+    ['any', 'ANY', 'any'],
+    ['average', 'AVG', 'average'],
+  ])('searches the %s result', (which, timeModifier, words) => {
+    const search = buildSearch(test({ which }), new Map(), 'k', tests);
+    expect(search.searchParams.query.rowFilters[0].parameterValues).toEqual(expect.objectContaining({ timeModifier }));
+    expect(search.description).toBe(`Patients with ${words} HIV viral load > 1000 copies/mL`);
+  });
+
+  it.each([
+    ['lt', 'LESS_THAN', '<'],
+    ['le', 'LESS_EQUAL', '<='],
+    ['eq', 'EQUAL', '='],
+    ['ge', 'GREATER_EQUAL', '>='],
+    ['gt', 'GREATER_THAN', '>'],
+  ])('compares with %s as %s', (operator, operator1, symbol) => {
+    const search = buildSearch(test({ operator }), new Map(), 'k', tests);
+    expect(search.searchParams.query.rowFilters[0].parameterValues).toEqual(expect.objectContaining({ operator1 }));
+    expect(search.description).toContain(` ${symbol} 1000 copies/mL`);
+  });
+
+  it('counts a window back from when the search is built, so a shared link stays relative', () => {
+    const search = buildSearch(test({ withinLastMonths: 6 }), new Map(), 'k', tests);
+    expect(search.searchParams.query.rowFilters[0].parameterValues).toEqual(
+      expect.objectContaining({ onOrAfter: '2026-04-19T15:30:00+00:00' }),
+    );
+    expect(search.description).toBe('Patients with most recent HIV viral load > 1000 copies/mL since 19/4/2026');
+  });
+
+  it('searches a start date from its first moment', () => {
+    const search = buildSearch(test({ onOrAfter: '2025-01-01' }), new Map(), 'k', tests);
+    expect(search.searchParams.query.rowFilters[0].parameterValues).toEqual(
+      expect.objectContaining({ onOrAfter: '2025-01-01T00:00:00+00:00' }),
+    );
+  });
+
+  it('round-trips through the encoder', () => {
+    const definition = withTest(test({ which: 'highest', withinLastDays: 30 })) as CohortDefinition;
+    expect(decodeDefinition(encodeDefinition(definition))).toEqual(definition);
   });
 });
