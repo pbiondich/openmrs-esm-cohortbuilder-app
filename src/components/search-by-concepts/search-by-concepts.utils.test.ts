@@ -83,8 +83,8 @@ describe('the Concepts tab search', () => {
     expect(getDescription(dated)).toBe(
       'Patients with most recent HIV viral load > 1000 copies/mL since 1/1/2026 until 30/6/2026',
     );
-    expect(getQueryDetails({ ...dated, withinLastMonths: 1 }).query.rowFilters[0].parameterValues.onOrAfter).toBe(
-      '2026-09-19T15:30:00+00:00',
+    expect(getQueryDetails({ ...dated, withinLastMonths: 1 }).query.rowFilters[0].parameterValues).toEqual(
+      expect.objectContaining({ onOrAfter: '2026-09-19T15:30:00+00:00' }),
     );
   });
 
