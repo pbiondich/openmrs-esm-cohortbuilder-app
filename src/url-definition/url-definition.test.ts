@@ -626,7 +626,7 @@ describe('test results in a link', () => {
     ['an unknown operator', test({ operator: 'between' }), '"operator" must be'],
     ['a value as text', test({ value: '1000' }), '"value" must be a number'],
     ['no value', test({ value: undefined }), '"value" must be a number'],
-    ['an infinite value', test({ value: 1e400 }), '"value" must be a number'],
+    ['an infinite value', test({ value: Infinity }), '"value" must be a number'],
     ['a huge value', test({ value: 1e13 }), '"value" must be a number'],
     ['an unknown result', test({ which: 'median' }), '"which" must be'],
     ['months as text', test({ withinLastMonths: '6' }), '"withinLastMonths" must be a whole number'],

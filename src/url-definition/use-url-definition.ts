@@ -15,7 +15,7 @@ import {
   URL_PARAMS,
   type UrlRequest,
 } from './url-definition';
-import { fetchDisplayNames } from './url-definition.resources';
+import { fetchDisplayNames, fetchTestDetails } from './url-definition.resources';
 
 interface UrlDefinitionHandlers {
   runSearch: (searchParams: SearchParams, description: string) => Promise<boolean>;
@@ -148,7 +148,14 @@ async function runDefinition(
   drugOrderSearchDefinitionKey: string,
 ) {
   const { criteria } = definition;
-  const names = await fetchDisplayNames(definition);
+  const [names, tests] = await Promise.all([fetchDisplayNames(definition), fetchTestDetails(definition)]);
+  // A test result is searched in its concept's units, so the concept must be a numeric one this server has.
+  const unknownTest = criteria.some(
+    (criterion) => criterion.type === 'numericObs' && tests.get(criterion.concept)?.hl7Abbrev !== 'NM',
+  );
+  if (unknownTest) {
+    throw new LinkError('linkTestNotNumeric', "This link's test result isn't a numeric test on this server");
+  }
   onDefinition(definition, names);
   // 1-based history positions of the entries this link added. Searches run meanwhile from the tabs are not included.
   const addedEntries: number[] = [];
@@ -166,7 +173,7 @@ async function runDefinition(
   };
 
   try {
-    const searches = criteria.map((criterion) => buildSearch(criterion, names, drugOrderSearchDefinitionKey));
+    const searches = criteria.map((criterion) => buildSearch(criterion, names, drugOrderSearchDefinitionKey, tests));
     for (const search of searches) {
       await runAndRecord(search);
     }
