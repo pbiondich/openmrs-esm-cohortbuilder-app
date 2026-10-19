@@ -470,6 +470,32 @@ describe('CohortCountProvider', () => {
       expect(lookups()).toHaveLength(0);
     });
 
+    it('offers the test being typed as a completion, from the lookup, before the question reads', async () => {
+      concepts.vir = concepts['viral load'];
+      const { last } = renderProvider(CohortCountProvider, 'women with vir');
+      await settle(testLookupDelayMs);
+      expect(last()).toMatchObject({ query: 'women with vir', status: 'idle' });
+      expect(last().completions).toEqual([
+        { insert: 'Viral load ', replace: 3, label: 'Viral load', detail: 'HIV viral load · copies/mL' },
+      ]);
+    });
+
+    it('offers a known program after enrolled in, with no request', async () => {
+      const { last } = renderProvider(CohortCountProvider, 'women enrolled in hi');
+      expect(last().completions).toEqual([{ insert: 'HIV Program ', replace: 2, label: 'HIV Program' }]);
+      await settle(testLookupDelayMs);
+      expect(lookups()).toHaveLength(0);
+    });
+
+    it('offers no completion for a name, or inside a chart', async () => {
+      const { last, rerender } = renderProvider(CohortCountProvider, 'patients with Mary Ach');
+      await settle(testLookupDelayMs);
+      expect(last().completions ?? []).toEqual([]);
+      rerender('women enrolled in hi', inChart);
+      expect(last().completions ?? []).toEqual([]);
+      expect(lookups()).toHaveLength(0);
+    });
+
     it('never looks up a test for text shaped like an identifier', async () => {
       renderProvider(CohortCountProvider, 'vl > 1000', global, { looksLikeIdentifier: true });
       await settle(testLookupDelayMs);
