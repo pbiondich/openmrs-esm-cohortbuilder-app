@@ -76,7 +76,8 @@ export type CompiledPhrases = Record<PhraseList, Compiled> & {
 /**
  * Lower case, one token per word, and the comparison signs, plus, slash and dashes as tokens of their
  * own. Apostrophes go ("women's" is "womens"), as do the punctuation marks people end questions with,
- * and commas too unless `commas` keeps them as tokens, as the parser does to read them as joiners.
+ * and commas and semicolons too unless `commas` keeps them, both as "," tokens, as the parser does to
+ * read them as joiners.
  * Null for any character a question about a cohort never needs, so it is never read.
  */
 export function tokenize(text: string, commas = false): Array<string> | null {
@@ -87,7 +88,8 @@ export function tokenize(text: string, commas = false): Array<string> | null {
     .replace(/[–—−]/g, '-')
     .replace(/≤/g, '<=')
     .replace(/≥/g, '>=')
-    .replace(commas ? /[.;:!?()"]/g : /[,.;:!?()"]/g, ' ')
+    .replace(/;/g, ',')
+    .replace(commas ? /[.:!?()"]/g : /[,.:!?()"]/g, ' ')
     .replace(/(<=|>=|=<|=>|<|>|=|\+|-|\/|,)/g, ' $1 ')
     // "30y", "15yo", "u5": numbers and words apart.
     .replace(/(\d)(\p{L})/gu, '$1 $2')

@@ -367,8 +367,8 @@ const isPopulation = (clause: Clause) => clause.kind === 'gender' || (clause.kin
 
 export function parseCohortCriteria(text: string, config: CohortCriteriaConfig): CohortDefinition | null {
   const P = config.phrases ?? compilePhrases();
-  // A comma is skipped wherever it stands, within a phrase or a name too, but joins two populations as
-  // "and" does: "women, children" is two.
+  // A comma or semicolon is skipped wherever it stands, within a phrase or a name too, but joins two
+  // populations as "and" does: "women, children" is two.
   const tokens: Array<string> = [];
   const afterComma = new Set<number>();
   for (const token of tokenize(text, true) ?? []) {
