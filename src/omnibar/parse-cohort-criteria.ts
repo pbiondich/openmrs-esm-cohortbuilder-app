@@ -549,8 +549,9 @@ function readClauses(
 /**
  * The words that stopped the parser, as typed, when they could be a test's name: from the first word
  * it couldn't read up to the comparison or window that follows ("viral load" in "patients with viral
- * load over 1000"), at most six words with a letter among them. The omnibar looks these up among the
- * server's concept names. Null when the text reads, or the words can't be a name.
+ * load over 1000"), at most six words with a letter among them, followed by a comparison or still
+ * being typed after other words. The omnibar looks these up among the server's concept names. Null
+ * when the text reads, or the words can't be a test's name.
  */
 export function unreadWords(text: string, config: CohortCriteriaConfig): string | null {
   const P = config.phrases ?? compilePhrases();
@@ -571,6 +572,11 @@ export function unreadWords(text: string, config: CohortCriteriaConfig): string 
   }
   const words = tokens.slice(start, end);
   if (!words.length || words.length > 6 || !words.some((word) => /\p{L}/u.test(word))) return null;
+  // Only words that could be a test: a comparison follows them, or they are still being typed after
+  // other words. So "Mary Achieng" is never looked up, and neither is a window with no comparison.
+  const compared = end < tokens.length && Boolean(longestOf(tokens, end, testComparisons, P));
+  const beingTyped = end === tokens.length && start > 0;
+  if (!compared && !beingTyped) return null;
   // Put back what the tokenizer split: "cd4", not "cd 4", when that is how it was typed.
   const typed = text.normalize('NFKC').toLowerCase();
   return words.reduce((joined, word) => {
