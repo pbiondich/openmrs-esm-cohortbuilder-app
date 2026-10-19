@@ -63,7 +63,8 @@ export interface Search {
 
 /**
  * Why a link could not be opened. `key`, `defaultMessage` and `options` are passed to t();
- * `message` is the English text.
+ * `message` is the English text. The page shows the reasons a valid link failed to run; a link that
+ * isn't valid shows only "This link isn't a valid cohort query", since its reason can quote the link.
  */
 export class LinkError extends Error {
   constructor(

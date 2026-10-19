@@ -48,7 +48,7 @@ export function useUrlDefinition({
       isRunning.current = true;
       setError(null);
       try {
-        await runRequest(readUrlRequest(params), handlers, drugOrderSearchDefinitionKey);
+        await runRequest(readLinkRequest(params), handlers, drugOrderSearchDefinitionKey);
       } catch (linkError) {
         setError(linkError);
       }
@@ -90,6 +90,18 @@ export function useUrlDefinition({
   }
   // The message is rendered as React text, which escapes it already; i18next escaping would show "&#x2F;".
   return t(error.key, error.defaultMessage, { ...error.options, interpolation: { escapeValue: false } });
+}
+
+/**
+ * The link's request, or one plain error for any link that isn't valid. The reason stays out of the
+ * page: it can quote the link, and anyone can write a link.
+ */
+function readLinkRequest(params: URLSearchParams): UrlRequest {
+  try {
+    return readUrlRequest(params);
+  } catch {
+    throw new LinkError('invalidCohortLink', "This link isn't a valid cohort query");
+  }
 }
 
 function removeUrlParams() {
