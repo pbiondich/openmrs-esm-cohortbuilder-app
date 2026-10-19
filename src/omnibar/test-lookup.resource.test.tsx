@@ -57,6 +57,37 @@ describe('looking up a test by name', () => {
     expect(toTests(null, 'en')).toEqual([]);
   });
 
+  it('also knows a name without the unit in brackets at its end, as CIEL writes "Weight (kg)"', () => {
+    const weight = '5089AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const creatinine = '790AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    expect(
+      toTests(
+        {
+          results: [
+            {
+              uuid: weight,
+              display: 'Weight (kg)',
+              units: 'kg',
+              datatype: { hl7Abbreviation: 'NM' },
+              names: [{ name: 'WT', locale: 'en' }],
+            },
+            {
+              uuid: creatinine,
+              display: 'Serum creatinine (umol/L)',
+              units: 'umol/L',
+              datatype: { hl7Abbreviation: 'NM' },
+              names: [{ name: 'Cr', locale: 'en' }],
+            },
+          ],
+        },
+        'en',
+      ),
+    ).toEqual([
+      { uuid: weight, label: 'Weight (kg)', aliases: ['Weight', 'WT'], units: 'kg' },
+      { uuid: creatinine, label: 'Serum creatinine (umol/L)', aliases: ['Serum creatinine', 'Cr'], units: 'umol/L' },
+    ]);
+  });
+
   it('asks once the words have stayed the same for a moment, for names, units and datatype only', async () => {
     const { rerender, result } = renderHook(({ words }) => useTestLookup(words, true, 'en'), {
       initialProps: { words: 'viral l' },
