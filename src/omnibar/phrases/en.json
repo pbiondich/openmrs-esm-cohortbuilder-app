@@ -1,5 +1,5 @@
 {
-  "$comment": "The words the omnibar's cohort parser understands in English. Data, not code: add phrases here, or per site with the omnibar.phrases config. Comparators use the FHIR search prefixes (lt, le, gt, ge, eq) as their ids: 'under' is lt, 'atMost' le, 'over' gt, 'atLeast' ge, 'aged' eq. Age groups give their source. A word in 'never' can't be a stopword, so text with a negation or an alternative is never read as something else. 'from age' is in both rangeFrom and atLeast on purpose: the reading that covers the most words decides, so 'from age 15 to 49' is a range and 'from age 15' is 15 and over. A site may add phrases in another script; they match only text in that script.",
+  "$comment": "The words the omnibar's cohort parser understands in English. Data, not code: add phrases here, or per site with the omnibar.phrases config. Comparators use the FHIR search prefixes (lt, le, gt, ge, eq) as their ids: 'under' is lt, 'atMost' le, 'over' gt, 'atLeast' ge, 'aged' eq. Age groups give their source. A word in 'never' can't be a stopword, so text with a negation or an alternative is never read as something else. 'from age' is in both rangeFrom and atLeast on purpose: the reading that covers the most words decides, so 'from age 15 to 49' is a range and 'from age 15' is 15 and over. A site may add phrases in another script; they match only text in that script. The tokenizer drops apostrophes, so 'never' lists contractions without them ('isnt', 'dont').",
   "stopwords": [
     "a",
     "all",
@@ -86,10 +86,26 @@
     "you"
   ],
   "never": [
+    "aint",
+    "arent",
     "but",
-    "except",
-    "excluding",
+    "cannot",
+    "cant",
+    "couldnt",
+    "didnt",
+    "doesnt",
+    "dont",
     "either",
+    "except",
+    "excl",
+    "excluding",
+    "hadnt",
+    "hasnt",
+    "havent",
+    "isnt",
+    "mustnt",
+    "neednt",
+    "neither",
     "never",
     "no",
     "non",
@@ -100,7 +116,12 @@
     "other",
     "others",
     "outside",
-    "without"
+    "shouldnt",
+    "wasnt",
+    "werent",
+    "without",
+    "wont",
+    "wouldnt"
   ],
   "female": [
     "female",
