@@ -104,7 +104,7 @@ describe('the paraphrase set', () => {
     ['patients between fifteen and forty nine', [age(15, 49)]],
     ['patients older than 14 and younger than 50', [age(15, 49)]],
     ['patients at least 15 and at most 49', [age(15, 49)]],
-    // Exact ages, and months in whole years
+    // Exact ages, and months only where they make whole years exactly
     ['patients aged 30', [age(30, 30)]],
     ['30 year olds', [age(30, 30)]],
     ['30 year old patients', [age(30, 30)]],
@@ -115,7 +115,8 @@ describe('the paraphrase set', () => {
     ['children under 24 months', [age(undefined, 1)]],
     ['under 30', [age(undefined, 29)]],
     ['women not under 30', [women(30)]],
-    ['patients 24 months old', [age(2, 2)]],
+    ['patients at least 24 months old', [age(2)]],
+    ['patients 24 months and older', [age(2)]],
     // Gender
     ['women', [women()]],
     ['how many women', [women()]],
@@ -230,6 +231,15 @@ describe('the paraphrase set', () => {
     'babies',
     'infants under 6 months',
     'patients under 18 months',
+    // Months are whole years only below or from a multiple of 12: "at most 12 months" takes in 23 months.
+    'patients at most 12 months',
+    'patients 12 months or younger',
+    'patients over 12 months',
+    'patients 24 months old',
+    'patients aged 24 months',
+    'patients between 12 and 24 months',
+    'patients between 12 months and 24 months',
+    'patients 12 months to 24 months',
     'patients over 2 weeks old',
     'patients aged 3 days',
     'women in their forties',
@@ -317,9 +327,11 @@ describe('every phrase in the English table', () => {
     expect(criteriaOf(`patients under 30 ${unit}`)).toEqual([age(undefined, 29)]);
   });
 
-  it.each(englishPhrases.months)('reads month unit %j only in whole years', (unit) => {
+  it.each(englishPhrases.months)('reads month unit %j only below or from a whole number of years', (unit) => {
     expect(criteriaOf(`patients under 36 ${unit}`)).toEqual([age(undefined, 2)]);
+    expect(criteriaOf(`patients at least 36 ${unit}`)).toEqual([age(3)]);
     expect(criteriaOf(`patients under 30 ${unit}`)).toBeNull();
+    expect(criteriaOf(`patients over 36 ${unit}`)).toBeNull();
   });
 
   it.each(englishPhrases.otherUnits)('never reads an age in %j', (unit) => {
