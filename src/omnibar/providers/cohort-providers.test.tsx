@@ -469,6 +469,29 @@ describe('CohortCountProvider', () => {
     expect(report.mock.calls.map(([sent]) => sent.results?.[0]?.title)).not.toContain('7 patients');
   });
 
+  it('never shows the next user a count already on a mounted row, and asks again for them', async () => {
+    const loggedIn = (uuid: string) =>
+      getSessionStore().setState({ loaded: true, session: { authenticated: true, user: { uuid } } as never });
+    onTestFinished(() => {
+      getSessionStore().setState({ loaded: false, session: null });
+    });
+    loggedIn('a1b2c3d4-0000-4000-8000-00000000000a');
+    answer({ ids: [1, 2, 3, 4, 5, 6, 7] });
+    const { last, report } = renderProvider(CohortCountProvider, 'women under 30');
+    await settle();
+    expect(last().results[0].title).toBe('7 patients');
+
+    answer();
+    const seenByA = report.mock.calls.length;
+    await act(async () => loggedIn('a1b2c3d4-0000-4000-8000-00000000000b'));
+    await settle();
+    const seenByB = report.mock.calls.slice(seenByA).map(([sent]) => sent.results?.[0]?.title);
+    expect(seenByB).not.toContain('7 patients');
+    expect(seenByB).toContain('Counting…');
+    expect(last().results[0].title).toBe('3 patients');
+    expect(requests()).toHaveLength(2);
+  });
+
   it('stops asking again after three changes of user during one count, with a plain error', async () => {
     const users = ['a', 'b'].map((letter) => `a1b2c3d4-0000-4000-8000-00000000000${letter}`);
     let switches = 0;
