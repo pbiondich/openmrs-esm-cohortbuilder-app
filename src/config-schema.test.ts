@@ -17,6 +17,17 @@ describe('config schema', () => {
     expect(defaults.omnibar).not.toHaveProperty('drugCriteriaEnabled');
   });
 
+  it('waits 600 ms of a still question before counting, and refuses a negative wait', () => {
+    expect(defaults.omnibar.countDebounceMs).toBe(600);
+    const [notNegative] = configSchema.omnibar.countDebounceMs._validators;
+    expect([-1, -0.5].map((value) => notNegative(value))).toEqual([expect.any(String), expect.any(String)]);
+    expect([0, 600, 5000].map((value) => notNegative(value))).toEqual([undefined, undefined, undefined]);
+  });
+
+  it('ships no encounter types, which are site content', () => {
+    expect(defaults.omnibar.encounterTypes).toEqual([]);
+  });
+
   it('refuses a savedSearchMinCharacters below 1', () => {
     const [atLeastOne] = configSchema.omnibar.savedSearchMinCharacters._validators;
     expect([-1, 0, 0.5].map((value) => atLeastOne(value))).toEqual([
