@@ -68,6 +68,7 @@ export async function countCohort(query: Query, signal?: AbortSignal): Promise<n
 }
 
 const maxCachedCounts = 50;
+const maxReasks = 3;
 // For the session: a count is asked for once per key. The key carries the day, since ages and "today" move.
 const counts = new Map<string, number>();
 let countsUser: string | undefined;
@@ -142,22 +143,31 @@ export function useCohortCount(key: string | null, query: Query | null, delayMs:
 
     setState(initial(key));
     const controller = new AbortController();
-    // An answer asked for by someone no longer logged in is never shown: the count is asked again.
+    // An answer asked for by someone no longer logged in is never shown: the count is asked again, up to
+    // maxReasks times, so a session that keeps changing ends in a plain error rather than a loop.
+    let reasks = 0;
     const ask = () => {
       const askedBy = currentUser();
       countCohort(queryRef.current, controller.signal).then(
         (count) => {
           if (controller.signal.aborted) return;
-          if (askedBy !== currentUser()) return ask();
+          if (askedBy !== currentUser()) return reaskOrGiveUp();
           remember(key, count, askedBy);
           setState(settled(key, count));
         },
         (error: unknown) => {
           if (controller.signal.aborted) return;
-          if (askedBy !== currentUser()) return ask();
+          if (askedBy !== currentUser()) return reaskOrGiveUp();
           setState({ ...settled(key), error: true, unavailable: isServerUnreachable(error) });
         },
       );
+    };
+    const reaskOrGiveUp = () => {
+      if (++reasks > maxReasks) {
+        setState({ ...settled(key), error: true });
+        return;
+      }
+      ask();
     };
     const timer = setTimeout(ask, Math.max(0, delayMs));
 
