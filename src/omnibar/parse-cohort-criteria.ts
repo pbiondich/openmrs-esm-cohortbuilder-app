@@ -386,7 +386,8 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
 
   const configuredDrugGroups = config.drugCriteriaEnabled ? config.drugGroups ?? [] : [];
 
-  let previous: Clause | null = null;
+  // Whether a gender or a named age group was read, and "and" or "with" skipped after one.
+  let population = false;
   let joined = false;
   let i = 0;
   while (i < tokens.length) {
@@ -405,16 +406,18 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
     if (!match) {
       const stopword = matchPhrase(tokens, i, P.stopwords);
       if (stopword === null) return null;
-      joined ||= tokens.slice(i, stopword).some((token) => joiners.has(token));
+      joined ||= population && tokens.slice(i, stopword).some((token) => joiners.has(token));
       i = stopword;
       continue;
     }
 
     const { clause } = match;
-    // "women and children" asks about two populations, so it never counts the girls they share.
-    if (joined && previous && isPopulation(previous) && isPopulation(clause)) return null;
-    previous = clause;
-    joined = false;
+    // "women and children", or "women under 30 and children", asks about two populations, so it never
+    // counts the girls they share.
+    if (isPopulation(clause)) {
+      if (joined) return null;
+      population = true;
+    }
     if (clause.kind === 'gender' || (clause.kind === 'age' && clause.gender)) {
       if (gender && gender !== clause.gender) return null;
       gender = clause.gender;
