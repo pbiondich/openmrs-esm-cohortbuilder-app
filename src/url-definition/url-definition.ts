@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import type { DropdownValue, SearchParams } from '../types';
 import * as demographics from '../components/search-by-demographics/search-by-demographics.utils';
 import * as drugOrders from '../components/search-by-drug-orders/search-by-drug-orders.utils';
+import * as encounters from '../components/search-by-encounters/search-by-encounters.utils';
 import * as enrollments from '../components/search-by-enrollments/search-by-enrollments.utils';
 
 // The URL contract is shared with the omnibar; see the README section
@@ -15,6 +16,7 @@ const MAX_LABEL_LENGTH = 200;
 const MAX_CRITERIA = 5;
 const MAX_PROGRAMS = 10;
 const MAX_DRUGS = 50;
+const MAX_ENCOUNTER_TYPES = 10;
 const MAX_AGE = 150;
 
 // Standard uuids, plus 36-character CIEL-style ids such as "1065AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".
@@ -43,7 +45,12 @@ export interface DrugOrderCriterion {
   activeOnOrBefore?: string;
 }
 
-export type Criterion = DemographicsCriterion | EnrollmentCriterion | DrugOrderCriterion;
+export interface EncounterCriterion {
+  type: 'encounter';
+  encounterTypes: string[];
+}
+
+export type Criterion = DemographicsCriterion | EnrollmentCriterion | DrugOrderCriterion | EncounterCriterion;
 
 export interface CohortDefinition {
   v: 1;
@@ -243,10 +250,15 @@ function validateCriterion(value: unknown, index: number): Criterion {
         activeOnOrBefore: activeOnOrBefore as string | undefined,
       };
     }
+    case 'encounter': {
+      const { encounterTypes } = expectCriterionObject(value, number, ['type', 'encounterTypes']);
+      expectUuids(encounterTypes, number, 'encounterTypes', MAX_ENCOUNTER_TYPES);
+      return { type, encounterTypes: encounterTypes as string[] };
+    }
     default:
       throw new LinkError(
         'criterionType',
-        'Criterion {{number}}: "type" must be "demographics", "enrollment" or "drugOrder"',
+        'Criterion {{number}}: "type" must be "demographics", "enrollment", "drugOrder" or "encounter"',
         { number },
       );
   }
@@ -385,6 +397,30 @@ export function buildSearch(
         description: drugOrders.getDescription({
           ...params,
           selectedDrugs: toDescribedValues(criterion.drugs, names, 'drug', 'drugs'),
+        }),
+      };
+    }
+    case 'encounter': {
+      // The encounters tab with only its types chosen: any number of encounters, at any time and place.
+      const params = {
+        selectedEncounterTypes: toDropdownValues(criterion.encounterTypes, names),
+        encounterForms: [],
+        encounterLocations: [],
+        atLeastCount: 0,
+        atMostCount: 0,
+        onOrAfter: '',
+        onOrBefore: '',
+      };
+      return {
+        searchParams: encounters.getQueryDetails(params),
+        description: encounters.getDescription({
+          ...params,
+          selectedEncounterTypes: toDescribedValues(
+            criterion.encounterTypes,
+            names,
+            'encounter type',
+            'encounter types',
+          ),
         }),
       };
     }
