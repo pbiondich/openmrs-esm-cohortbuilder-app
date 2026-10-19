@@ -9,6 +9,8 @@ import { type CohortCriteriaConfig, type CohortTest, typedProgramWords, typedTes
  */
 
 const maxCompletions = 5;
+// The contract's limit for an insert is 120 characters, and each name gets a trailing space.
+const maxName = 119;
 
 /** The end of `query` that holds `words`, whatever the spacing and case: how much a completion replaces. */
 function typedLength(query: string, words: string): number | null {
@@ -17,6 +19,7 @@ function typedLength(query: string, words: string): number | null {
     .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('\\s*');
   const match = new RegExp(`${pattern}\\s*$`, 'iu').exec(query.normalize('NFKC'));
+  // NFKC can change the text's length, and then the match's length isn't a count of what was typed.
   return match && query.normalize('NFKC').length === query.length ? match[0].length : null;
 }
 
@@ -42,7 +45,7 @@ export function completionsFor(
       const name = [program.label, ...(program.aliases ?? [])].find((candidate) =>
         candidate.toLowerCase().startsWith(typed),
       );
-      if (name && !completions.some(({ label }) => label === program.label)) {
+      if (name && program.label.length <= maxName && !completions.some(({ label }) => label === program.label)) {
         completions.push({ insert: `${program.label} `, replace, label: program.label });
       }
     }
@@ -54,7 +57,7 @@ export function completionsFor(
   if (words && replace !== null) {
     for (const test of lookedUp(words) ?? []) {
       const name = nameFor(test, words);
-      if (name) {
+      if (name && name.length <= maxName) {
         completions.push({
           insert: `${name} `,
           replace,
