@@ -253,7 +253,11 @@ const wordsOfNames = new WeakMap<Named, Array<Array<string>>>();
 function namesOf(item: Named): Array<Array<string>> {
   let names = wordsOfNames.get(item);
   if (!names) {
-    names = [item.label, ...(item.aliases ?? [])].map((name) => tokenize(name ?? '')).filter((words) => words?.length);
+    names = [item.label, ...(item.aliases ?? [])]
+      .map((name) => tokenize(name ?? ''))
+      // "MDR-TB" is also typed "MDR TB".
+      .flatMap((words) => (words?.includes('-') ? [words, words.filter((word) => word !== '-')] : [words]))
+      .filter((words) => words?.length);
     wordsOfNames.set(item, names);
   }
   return names;
