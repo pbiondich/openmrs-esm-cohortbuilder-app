@@ -343,6 +343,9 @@ function describeAge(minAge?: number, maxAge?: number): string | null {
 const isAge = (value: number | undefined) =>
   value == null || (Number.isInteger(value) && value >= 0 && value <= MAX_AGE);
 
+const joiners = new Set(['and', 'with']);
+const isPopulation = (clause: Clause) => clause.kind === 'gender' || (clause.kind === 'age' && clause.group);
+
 export function parseCohortCriteria(text: string, config: CohortCriteriaConfig): CohortDefinition | null {
   const P = config.phrases ?? compilePhrases();
   const tokens = tokenize(text);
@@ -364,6 +367,8 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
 
   const configuredDrugGroups = config.drugCriteriaEnabled ? config.drugGroups ?? [] : [];
 
+  let previous: Clause | null = null;
+  let joined = false;
   let i = 0;
   while (i < tokens.length) {
     // Criteria before stopwords, so "at least" is read before "at" could be skipped, and the reading
@@ -381,11 +386,16 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
     if (!match) {
       const stopword = matchPhrase(tokens, i, P.stopwords);
       if (stopword === null) return null;
+      joined ||= tokens.slice(i, stopword).some((token) => joiners.has(token));
       i = stopword;
       continue;
     }
 
     const { clause } = match;
+    // "women and children" asks about two populations, so it never counts the girls they share.
+    if (joined && previous && isPopulation(previous) && isPopulation(clause)) return null;
+    previous = clause;
+    joined = false;
     if (clause.kind === 'gender' || (clause.kind === 'age' && clause.gender)) {
       if (gender && gender !== clause.gender) return null;
       gender = clause.gender;
