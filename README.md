@@ -89,14 +89,16 @@ When an omnibar is installed, the builder adds cohort rows to it outside a chart
 
 | Extension | Order | Row | Privileges |
 | --- | --- | --- | --- |
-| `omnibar-cohort-criteria-provider` | 20 | "Build cohort: …" when the whole text reads as a cohort ("women aged 15-49 enrolled in HIV program"). It opens the builder with that `?definition=`. Text it can't fully read gives no row | Get Patients, Run Reports |
+| `omnibar-cohort-count-provider` | 20 | The number of patients when the whole text reads as a cohort ("how many women aged 15-49 enrolled in HIV program?"), with what was counted in the builder's own words underneath. It shows "Counting…" first, then the number, and opens the builder with that `?definition=`, which runs it and lists the patients. Text it can't fully read gives no row. It answers `/cohort` and `/count` | Get Patients, Run Reports |
 | `omnibar-cohort-builder-provider` | 30 | "Cohort Builder" for text starting with "cohort", "build cohort", "find patients who" and the like | Get Patients, Run Reports |
 | `omnibar-saved-cohorts-provider` | 40 | Saved cohorts by name (`GET /cohort?q=`), opened with `?cohort=` | Get Patient Cohorts, Get Patients |
 | `omnibar-saved-queries-provider` | 50 | Saved queries by name (`GET /reportingrest/dataSetDefinition?q=[AdHocDataExport]`), opened with `?query=` | View Reports, Run Reports, Get Patients |
 
-- The first two rows never call the server; nothing is searched until a row is chosen. The saved rows wait for typing to pause, cancel a request that is out of date, and need `omnibar.savedSearchMinCharacters` characters.
+- Parsing never calls the server. The count is asked for once the parsed cohort has stayed the same for `omnibar.countDebounceMs`, so rewording ("how many …") keeps the same count; a count the user has typed past is cancelled, and counts are remembered for the session, per day. A program enrollment on its own is counted with `GET /reportingrest/cohort/<patientsWithEnrollment>?v=ref`, which returns only the count; anything else is the builder's own ad hoc query sent with `v=rowFilters` and no columns, which returns the matching ids without evaluating any data for them. reportingrest has no count-only call for a composition yet.
+- The "Cohort Builder" row never calls the server. The saved rows wait for typing to pause, cancel a request that is out of date, and need `omnibar.savedSearchMinCharacters` characters.
 - Text shaped like a patient identifier (such as `100GEJ` or `MRN-1234`) gets no cohort row, so patient search has it to itself.
-- When the server can't be reached, a saved group shows one quiet "unavailable" line.
+- When the server can't be reached, the count and saved groups show one quiet "unavailable" line; any other failure shows the omnibar's own error line, never the server's message.
+- The count row needs Run Reports as well as the Get Patients that reporting's cohort evaluation checks, so no one who can't run the builder's own search sees a count, however small. It is mounted only outside a chart.
 - The links are built and checked against this builder's own decoder, so a row never offers a link the builder would refuse.
 
 Config, in `@openmrs/esm-cohort-builder-app`:
@@ -105,6 +107,8 @@ Config, in `@openmrs/esm-cohort-builder-app`:
 | --- | --- | --- |
 | `omnibar.enabled` | `true` | Off, every row stays empty and nothing is fetched. Removing the extensions with `"omnibar-providers-slot": {"remove": [...]}` works too |
 | `omnibar.savedSearchMinCharacters` | `2` | Characters needed before saved cohorts and queries are searched. At least 1: a lower value is refused and treated as 1 |
+| `omnibar.countDebounceMs` | `600` | How long the parsed cohort must stay the same before it is counted. Not negative |
 | `omnibar.programs` | The RefApp demo programs | Programs the cohort row understands, with aliases ("enrolled in HIV") |
+| `omnibar.encounterTypes` | None (site content) | Encounter types the cohort row understands, with aliases, followed by the word "encounter" ("patients with an admission encounter") |
 | `omnibar.drugGroups` | ARVs (demo formulary), TLD (none on the demo) | Drug groups the cohort row understands ("on ARVs"), as Drug uuids |
 | `drugCriteriaEnabled` | `false` | Whether the server can run drug order searches (see above). Off, "on ARVs" gives no row |
