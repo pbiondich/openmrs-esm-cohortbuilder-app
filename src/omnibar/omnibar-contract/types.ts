@@ -33,6 +33,24 @@ export interface OmnibarContext {
    * the results or remounts providers. Hosts from before contract 1 was published don't pass it.
    */
   workspaceGroup?: OmnibarWorkspaceGroup | null;
+  /**
+   * The slash command in force, such as `{ id: 'lab' }` for `/lab cd4`. Set only for providers that
+   * declare that id, and for views that do. New in v1 and optional; a provider must work without it.
+   */
+  command?: { id: string };
+}
+
+/**
+ * A slash command a provider answers, new in v1 and optional. `id` is stable, lower-case ASCII
+ * (letters, digits and hyphens, starting with a letter), never shown and never translated: URLs,
+ * history and config use it. `aliases` are the English names people type after the slash, without the
+ * slash, each one word. Translated aliases, the label and the description come from the provider
+ * module's translations: `omnibarCommand.<id>.aliases` (comma-separated), `.label` and `.description`.
+ * Several providers may declare the same id; their aliases are merged and all of them run.
+ */
+export interface OmnibarCommand {
+  id: string;
+  aliases: Array<string>;
 }
 
 export interface OmnibarWorkspaceGroup {
@@ -90,12 +108,24 @@ export interface OmnibarProviderMeta {
    * nothing isn't shown at all.
    */
   dedupeKey?: string;
+  /**
+   * The slash command this provider answers, new in v1 and optional. With a command chosen in the bar,
+   * only providers declaring its id are mounted, under every other rule here as well, and they get it
+   * as `context.command`. Every provider still runs for plain text; one that declares no command isn't
+   * mounted while a command is chosen.
+   */
+  command?: OmnibarCommand;
 }
 
 /** Facts about the query, worked out once by the host for every provider. */
 export interface OmnibarQueryHints {
   /** See `looksLikeIdentifier`. */
   looksLikeIdentifier: boolean;
+  /**
+   * New in v1. See `looksLikeQuestion`, called with the host's own word count. Hosts from before it
+   * was added don't pass it; call `looksLikeQuestion(query)` then.
+   */
+  looksLikeQuestion?: boolean;
 }
 
 export type OmnibarTarget =
@@ -220,6 +250,88 @@ export interface OmnibarProviderProps {
   hints?: OmnibarQueryHints;
   /** The contract version the host speaks. Hosts from before contract 1 was published don't pass it. */
   contractVersion?: number;
+}
+
+/**
+ * Query results views, new in v1 and optional. Pressing Enter on a query inside a chart opens the
+ * chart's Query results section, which mounts every view in this slot with that query. A view is an
+ * ordinary extension, registered from its own app's routes.json with `OmnibarViewMeta` as its meta.
+ * Unlike a provider it renders: one section of the page, with its own heading. The design rules apply
+ * as they do to providers: a view navigates or opens a workspace, never writes to the record, calls a
+ * model only for a query the user just submitted or when the clinician asks in the view, and uses
+ * `context.patientUuid` only.
+ */
+export const OMNIBAR_QUERY_RESULTS_SLOT = 'omnibar-query-results-slot';
+
+/**
+ * What a view tells the host about its section.
+ * - loading: still looking
+ * - empty: nothing for this query; the host hides the section, and when every view says so, the
+ *   page says plainly that nothing matched
+ * - ready: the section has something to show
+ * - error: it failed; the view says so in its own section, never with a server's message
+ * - unavailable: its server couldn't be reached (see `isServerUnreachable`); the view says
+ *   "Unavailable right now" in its own section
+ */
+export type OmnibarViewState = 'loading' | 'empty' | 'ready' | 'error' | 'unavailable';
+
+/** Declared in the view's routes.json entry as `meta`. */
+export interface OmnibarViewMeta {
+  /** Only 'patient' for now: there is no Query results page outside a chart. */
+  scopes: Array<OmnibarScope>;
+  /** Lower comes first. Defaults to 100. */
+  order?: number;
+  /** As for providers: the contract major version, a whole number. Missing means 1. */
+  contract?: number;
+  /** As for providers: not mounted while the query looks like a patient identifier. */
+  skipIdentifierQueries?: boolean;
+  /**
+   * The slash command this view shows results for, new in v1 and optional. A query sent with a
+   * command mounts only the views declaring its id; a view without one mounts only for plain queries.
+   * `id` is as for a provider's `OmnibarCommand`. `aliases`, also new in v1 and optional, are as for a
+   * provider: the English names typed after the slash. A view that declares a command adds it to the
+   * bar's command list as a provider does, merged with any provider's declaration of the same id, while
+   * the view is assigned to the user, for a patient, on a contract the host speaks. Translated aliases,
+   * the label and the description come from the view module's translations,
+   * `omnibarCommand.<id>.aliases` (comma-separated), `.label` and `.description`, as for providers. A
+   * command only views declare mounts no providers in the bar.
+   */
+  command?: { id: string; aliases?: Array<string> };
+  /**
+   * New in v1. The view may call a model for a query the user just submitted, and this is the name the
+   * bar's hint uses: "Enter to see all results for '…' and ask ChartSearch". Shown as written, so it
+   * is a product name, not a sentence. The bar says it only while the view is assigned to the user,
+   * isn't skipped for the query and would mount for it (under a command, only a view declaring it);
+   * the query looks like a question by the same test the host passes as `hints.looksLikeQuestion`, or,
+   * under the `ask` command, is any text that isn't ID-shaped; and Enter marks the submission: for
+   * plain text, and under `ask`, never under another command.
+   */
+  asksModel?: string;
+}
+
+/** Props every Query results view receives. */
+export interface OmnibarViewProps {
+  query: string;
+  /** The chart's patient, from the host. Never read the patient from the URL. */
+  context: OmnibarContext;
+  /** The contract version the host speaks. */
+  contractVersion: number;
+  /** Dropped once the host has moved past this mount: another query or chart, or the page closing. */
+  reportState: (state: OmnibarViewState) => void;
+  hints?: OmnibarQueryHints;
+  /**
+   * True when the user asked for this query just now: Enter in the bar, its "see all results" line, or
+   * an earlier query chosen on the page. False when the page was reloaded, reached with back or
+   * forward, or opened from a bookmark or the left nav. A view that calls a model calls it only when
+   * this is true, or when the clinician asks in the view.
+   */
+  submitted?: boolean;
+  /**
+   * New in v1. Aborted when the host moves past this mount: another query or chart, a rerun, the page
+   * closing. Hosts from before it was added don't pass it, so a view still aborts its own work when it
+   * unmounts.
+   */
+  signal?: AbortSignal;
 }
 
 /** Fired on window after the user picks a result, for bookkeeping such as recently viewed patients. */
