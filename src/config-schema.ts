@@ -91,7 +91,7 @@ export const configSchema = {
       _type: Type.Boolean,
       _default: true,
       _description:
-        'Offer cohort rows in the omnibar: a pre-filled cohort search for text such as "women aged 15-49", a ' +
+        'Offer cohort rows in the omnibar: a patient count for text such as "how many women aged 15-49", a ' +
         'link to the Cohort Builder, and saved cohorts and saved queries by name. They show only where an ' +
         'omnibar is installed. Off, every row stays empty and nothing is fetched. Removing the providers ' +
         'from "omnibar-providers-slot" in config works too.',
@@ -103,6 +103,15 @@ export const configSchema = {
         'Characters needed before saved cohorts and saved queries are searched by name: at least 1, so an empty ' +
         'query is never searched.',
       _validators: [validator((value: number) => value >= 1, 'Must be at least 1.')],
+    },
+    countDebounceMs: {
+      _type: Type.Number,
+      _default: 600,
+      _description:
+        'How long, in milliseconds, the question in the omnibar must stay the same cohort before the count row ' +
+        'asks the server to count it. Typing that only changes the wording, such as "how many", keeps waiting ' +
+        'for the same count.',
+      _validators: [validator((value: number) => value >= 0, 'Must not be negative.')],
     },
     programs: {
       _type: Type.Array,
@@ -185,6 +194,7 @@ export interface ConfigObject {
   omnibar: {
     enabled: boolean;
     savedSearchMinCharacters: number;
+    countDebounceMs: number;
     programs: Array<CohortProgram>;
     drugGroups: Array<CohortDrugGroup>;
     encounterTypes: Array<CohortEncounterType>;

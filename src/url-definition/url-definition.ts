@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import type { DropdownValue, DrugOrderDetails, SearchParams } from '../types';
+import { composeQueries } from '../components/composition/composition.utils';
 import * as demographics from '../components/search-by-demographics/search-by-demographics.utils';
 import * as drugOrders from '../components/search-by-drug-orders/search-by-drug-orders.utils';
 import * as encounters from '../components/search-by-encounters/search-by-encounters.utils';
@@ -488,6 +489,25 @@ function drugOrderValues(criterion: DrugOrderCriterion, names: Map<string, strin
 /** A definition's description: each criterion's, as its search tab words it, ANDed. */
 export function describeSearches(searches: Search[]): string {
   return searches.map(({ description }) => description).join(' AND ');
+}
+
+/**
+ * The whole definition as one search: what a link runs last, its criteria's searches composed as the
+ * Composition tab composes them, so a count of it is the count the builder then shows.
+ */
+export function definitionSearch(
+  { criteria }: CohortDefinition,
+  names: Map<string, string>,
+  drugOrderSearchDefinitionKey: string,
+): Search {
+  const searches = criteria.map((criterion) => buildSearch(criterion, names, drugOrderSearchDefinitionKey));
+  if (searches.length === 1) {
+    return searches[0];
+  }
+  return {
+    searchParams: composeQueries(searches.map(({ searchParams }) => searchParams.query)),
+    description: describeSearches(searches),
+  };
 }
 
 function toDropdownValues(uuids: string[], names: Map<string, string>): DropdownValue[] {

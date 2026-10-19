@@ -23,9 +23,9 @@
       "offline": true
     },
     {
-      "name": "omnibar-cohort-criteria-provider",
+      "name": "omnibar-cohort-count-provider",
       "slot": "omnibar-providers-slot",
-      "component": "cohortCriteriaOmnibarProvider",
+      "component": "cohortCountOmnibarProvider",
       "privileges": [
         "Get Patients",
         "Run Reports"
@@ -36,7 +36,14 @@
           "global"
         ],
         "order": 20,
-        "contract": 1
+        "contract": 1,
+        "command": {
+          "id": "cohort",
+          "aliases": [
+            "cohort",
+            "count"
+          ]
+        }
       }
     },
     {

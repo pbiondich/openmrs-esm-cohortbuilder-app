@@ -164,7 +164,9 @@ describe('useUrlDefinition', () => {
   });
 
   it('searches encounter types, named from the server', async () => {
-    openBuilderAt(`?definition=${encode({ v: 1, criteria: [{ type: 'encounter', encounterTypes: [encounterTypeUuid] }] })}`);
+    openBuilderAt(
+      `?definition=${encode({ v: 1, criteria: [{ type: 'encounter', encounterTypes: [encounterTypeUuid] }] })}`,
+    );
 
     await waitFor(() => expect(history()).toHaveLength(1));
     expect(history()[0].description).toBe('Patients with Encounter of Types Adult Visit');

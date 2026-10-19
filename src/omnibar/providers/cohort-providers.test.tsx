@@ -415,13 +415,13 @@ describe('CohortCountProvider', () => {
   });
 
   it('remembers a count for the session, so asking again shows it at once', async () => {
-    const first = renderProvider(CohortCountProvider, 'women under 30');
+    const view = renderProvider(CohortCountProvider, 'women under 30');
     await settle();
-    first.rerender('men');
+    view.rerender('men');
     await settle();
-    first.rerender('how many women under 30?');
-    expect(first.last()).toMatchObject({ status: 'ready' });
-    expect(first.last().results[0].title).toBe('3 patients');
+    view.rerender('how many women under 30?');
+    expect(view.last()).toMatchObject({ status: 'ready' });
+    expect(view.last().results[0].title).toBe('3 patients');
     expect(requests()).toHaveLength(2);
   });
 
