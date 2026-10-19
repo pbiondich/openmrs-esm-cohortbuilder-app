@@ -9,6 +9,7 @@ import { useCohortCount } from '../cohort-count.resource';
 import { type OmnibarProviderProps } from '../omnibar-contract';
 import { type CohortCriteriaConfig, cohortCriteriaConfig, parseCohortCriteria } from '../parse-cohort-criteria';
 import { useCohortRowsAllowed } from '../use-cohort-rows-allowed';
+import { mergeVocabulary, useServerVocabulary } from '../vocabulary.resource';
 
 /**
  * One row with the number of patients, when the whole query parses into a cohort definition: "how many
@@ -46,7 +47,11 @@ const CohortCountProvider: React.FC<OmnibarProviderProps> = (props) => {
   const { t } = useTranslation();
   const config = useConfig<ConfigObject>();
   const allowed = useCohortRowsAllowed(props);
-  const criteriaConfig = useMemo(() => cohortCriteriaConfig(config), [config]);
+  const vocabulary = useServerVocabulary(allowed && config.omnibar.serverVocabulary, context.locale ?? 'en');
+  const criteriaConfig = useMemo(() => {
+    const configured = cohortCriteriaConfig(config);
+    return { ...configured, ...mergeVocabulary(configured, vocabulary) };
+  }, [config, vocabulary]);
   const { drugOrderSearchDefinitionKey } = config;
 
   const offer = useMemo(() => {
