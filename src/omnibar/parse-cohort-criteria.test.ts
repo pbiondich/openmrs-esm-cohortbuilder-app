@@ -134,9 +134,8 @@ describe('parseCohortCriteria', () => {
     ['a lone 0 and over', '0 and over'],
     ['a reversed range', 'aged 50-20'],
     ['two lower bounds', 'over 18 over 21'],
-    ['a number in words', 'women over fifty'],
     ['a dangling verb', 'women on'],
-    ['a word we do not guess', 'children'],
+    ['a word we do not guess', 'villagers'],
     ['a character we never parse', 'women café'],
     ['a concept lookup', 'cd4 count'],
   ])('rejects %s: %j', (_label, text) => {
@@ -317,6 +316,7 @@ describe('parseCohortCriteria', () => {
         programs: config.omnibar.programs,
         drugGroups: config.omnibar.drugGroups,
         encounterTypes: config.omnibar.encounterTypes,
+        phrases: expect.objectContaining({ numbers: expect.any(Map) }),
       });
     });
 
