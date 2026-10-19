@@ -138,7 +138,8 @@ describe('useUrlDefinition', () => {
       'Patients enrolled in HIV Care and Treatment',
       // formatDate is the framework mock's.
       'Patients who taking 1 drug on or after Today, 12:00 AM',
-      'Women 15-49 in HIV care on ARVs',
+      // The builder's own words for each criterion, never the link's label.
+      'Female Patients with ages between 15 and 49 years that are alive AND Patients enrolled in HIV Care and Treatment AND Patients who taking 1 drug on or after Today, 12:00 AM',
     ]);
     expect(history().map(({ patients }) => patients.length)).toEqual([3, 2, 2, 1]);
 
@@ -171,7 +172,7 @@ describe('useUrlDefinition', () => {
       'Female Patients with ages between 15 and 49 years that are alive',
       'Manual search',
       'Patients enrolled in HIV Care and Treatment',
-      'Composition of 1 AND 3',
+      'Female Patients with ages between 15 and 49 years that are alive AND Patients enrolled in HIV Care and Treatment',
     ]);
   });
 
@@ -199,18 +200,22 @@ describe('useUrlDefinition', () => {
     openBuilderAt(`?definition=${encode(twoCriteria)}`);
 
     await waitFor(() => expect(history()).toHaveLength(4));
-    expect(history()[3].description).toBe('Composition of 2 AND 3');
+    expect(history()[3].description).toBe(
+      'Female Patients with ages between 15 and 49 years that are alive AND Patients enrolled in HIV Care and Treatment',
+    );
+    expect(adHocQueryBodies()[2].customRowFilterCombination).toBe('(1 AND 2 AND NOT 3) AND (4)');
   });
 
-  it('uses the label for a single criterion and does not compose', async () => {
+  it("describes a single criterion in the builder's words, whatever the label says, and does not compose", async () => {
     openBuilderAt(
-      `?definition=${encode({ v: 1, label: '<b>Adults</b>', criteria: [{ type: 'demographics', minAge: 18 }] })}`,
+      `?definition=${encode({ v: 1, label: 'HIV patients', criteria: [{ type: 'demographics', minAge: 18 }] })}`,
     );
 
     await waitFor(() => expect(history()).toHaveLength(1));
-    expect(history()[0].description).toBe('<b>Adults</b>');
+    expect(history()[0].description).toBe('All Patients with minimum age of 18 years that are alive');
     expect(adHocQueryBodies()).toHaveLength(1);
-    expect(await screen.findByText('<b>Adults</b>')).toBeInTheDocument();
+    expect(await screen.findByText('All Patients with minimum age of 18 years that are alive')).toBeInTheDocument();
+    expect(screen.queryByText('HIV patients')).not.toBeInTheDocument();
   });
 
   it('keeps the history as it was and shows why when a search fails', async () => {
@@ -344,7 +349,7 @@ describe('useUrlDefinition', () => {
     );
 
     await waitFor(() => expect(history()).toHaveLength(1));
-    expect(history()[0].description).toBe('Adults');
+    expect(history()[0].description).toBe('All Patients with minimum age of 18 years that are alive');
     expect(window.location.search).toBe('');
   });
 
@@ -352,19 +357,21 @@ describe('useUrlDefinition', () => {
     let answerFirstSearch: () => void;
     beforeAdHocQueryAnswers = (call) =>
       call === 0 ? new Promise<void>((resolve) => (answerFirstSearch = resolve)) : undefined;
-    const link = (label: string) =>
-      `?definition=${encode({ v: 1, label, criteria: [{ type: 'demographics', minAge: 18 }] })}`;
-    openBuilderAt(link('First'));
+    const link = (minAge: number) => `?definition=${encode({ v: 1, criteria: [{ type: 'demographics', minAge }] })}`;
+    openBuilderAt(link(18));
     await waitFor(() => expect(adHocQueryBodies()).toHaveLength(1));
 
-    openLinkWhileShown(link('Second'));
-    openLinkWhileShown(link('Third'));
+    openLinkWhileShown(link(30));
+    openLinkWhileShown(link(40));
     expect(window.location.search).toBe('');
     expect(adHocQueryBodies()).toHaveLength(1);
 
     answerFirstSearch();
     await waitFor(() => expect(history()).toHaveLength(2));
-    expect(history().map(({ description }) => description)).toEqual(['First', 'Third']);
+    expect(history().map(({ description }) => description)).toEqual([
+      'All Patients with minimum age of 18 years that are alive',
+      'All Patients with minimum age of 40 years that are alive',
+    ]);
     expect(adHocQueryBodies()).toHaveLength(2);
   });
 
