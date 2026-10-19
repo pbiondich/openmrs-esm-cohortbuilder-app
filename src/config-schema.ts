@@ -162,7 +162,6 @@ export const configSchema = {
       _default: COHORT_DRUG_GROUPS_DEFAULT,
     },
     phrases: {
-      _type: Type.Object,
       _description:
         "Phrases this site adds to the cohort parser's English table (src/omnibar/phrases/en.json), list by list: " +
         'for example "under": ["younger then"] or "stopwords": ["mwili"]. Comparators are named after the FHIR search ' +
