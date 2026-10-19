@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import type { DropdownValue, DrugOrderDetails, SearchParams } from '../types';
 import { composeQueries } from '../components/composition/composition.utils';
+import * as concepts from '../components/search-by-concepts/search-by-concepts.utils';
 import * as demographics from '../components/search-by-demographics/search-by-demographics.utils';
 import * as drugOrders from '../components/search-by-drug-orders/search-by-drug-orders.utils';
 import * as encounters from '../components/search-by-encounters/search-by-encounters.utils';
@@ -18,6 +19,9 @@ export const MAX_CRITERIA = 5;
 export const MAX_PROGRAMS = 10;
 export const MAX_DRUGS = 50;
 export const MAX_ENCOUNTER_TYPES = 10;
+export const MAX_TEST_VALUE = 1e12;
+export const MAX_WITHIN_MONTHS = 240;
+export const MAX_WITHIN_DAYS = 3650;
 export const MAX_AGE = 150;
 
 // Standard uuids, plus 36-character CIEL-style ids such as "1065AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".
@@ -51,7 +55,51 @@ export interface EncounterCriterion {
   encounterTypes: string[];
 }
 
-export type Criterion = DemographicsCriterion | EnrollmentCriterion | DrugOrderCriterion | EncounterCriterion;
+/** The comparisons, named after the FHIR search prefixes, as the cohort phrase table names them. */
+export type TestOperator = 'lt' | 'le' | 'eq' | 'ge' | 'gt';
+export type TestResult = 'latest' | 'first' | 'lowest' | 'highest' | 'any' | 'average';
+
+/**
+ * A numeric test result, in the concept's own units: the most recent result unless `which` says
+ * otherwise, and from any time unless a window or a start date is given.
+ */
+export interface NumericObsCriterion {
+  type: 'numericObs';
+  concept: string;
+  operator: TestOperator;
+  value: number;
+  which?: TestResult;
+  withinLastMonths?: number;
+  withinLastDays?: number;
+  onOrAfter?: string;
+}
+
+export type Criterion =
+  | DemographicsCriterion
+  | EnrollmentCriterion
+  | DrugOrderCriterion
+  | EncounterCriterion
+  | NumericObsCriterion;
+
+/** What the builder needs to know of a test's concept: its name, its units and that it is numeric. */
+export type TestDetails = Map<string, { name: string; units: string; hl7Abbrev: string }>;
+
+const operators: Record<TestOperator, string> = {
+  lt: 'LESS_THAN',
+  le: 'LESS_EQUAL',
+  eq: 'EQUAL',
+  ge: 'GREATER_EQUAL',
+  gt: 'GREATER_THAN',
+};
+
+const results: Record<TestResult, string> = {
+  latest: 'LAST',
+  first: 'FIRST',
+  lowest: 'MIN',
+  highest: 'MAX',
+  any: 'ANY',
+  average: 'AVG',
+};
 
 export interface CohortDefinition {
   v: 1;
@@ -274,10 +322,54 @@ function validateCriterion(value: unknown, index: number): Criterion {
       expectUuids(encounterTypes, number, 'encounterTypes', MAX_ENCOUNTER_TYPES);
       return { type, encounterTypes: encounterTypes as string[] };
     }
+    case 'numericObs': {
+      const criterion = expectCriterionObject(value, number, [
+        'type',
+        'concept',
+        'operator',
+        'value',
+        'which',
+        'withinLastMonths',
+        'withinLastDays',
+        'onOrAfter',
+      ]);
+      const { concept, operator, which, withinLastMonths, withinLastDays, onOrAfter } = criterion;
+      if (!isUuid(concept)) {
+        throw new LinkError('criterionConcept', 'Criterion {{number}}: "concept" must be a uuid', { number });
+      }
+      if (typeof operator !== 'string' || !Object.hasOwn(operators, operator)) {
+        throw new LinkError('criterionOperator', 'Criterion {{number}}: "operator" must be lt, le, eq, ge or gt', {
+          number,
+        });
+      }
+      if (
+        typeof criterion.value !== 'number' ||
+        !Number.isFinite(criterion.value) ||
+        Math.abs(criterion.value) > MAX_TEST_VALUE
+      ) {
+        throw new LinkError('criterionValue', 'Criterion {{number}}: "value" must be a number', { number });
+      }
+      if (which !== undefined && (typeof which !== 'string' || !Object.hasOwn(results, which))) {
+        throw new LinkError(
+          'criterionWhich',
+          'Criterion {{number}}: "which" must be latest, first, lowest, highest, any or average',
+          { number },
+        );
+      }
+      expectOptionalCount(withinLastMonths, number, 'withinLastMonths', MAX_WITHIN_MONTHS);
+      expectOptionalCount(withinLastDays, number, 'withinLastDays', MAX_WITHIN_DAYS);
+      expectOptionalDate(onOrAfter, number, 'onOrAfter', false);
+      if (onOrAfter !== undefined && (withinLastMonths !== undefined || withinLastDays !== undefined)) {
+        throw new LinkError('criterionWindow', 'Criterion {{number}}: give a window or "onOrAfter", not both', {
+          number,
+        });
+      }
+      return criterion as unknown as NumericObsCriterion;
+    }
     default:
       throw new LinkError(
         'criterionType',
-        'Criterion {{number}}: "type" must be "demographics", "enrollment", "drugOrder" or "encounter"',
+        'Criterion {{number}}: "type" must be "demographics", "enrollment", "drugOrder", "encounter" or "numericObs"',
         { number },
       );
   }
@@ -318,6 +410,20 @@ function expectUuids(value: unknown, number: number, field: string, max: number)
       field,
       max,
     });
+  }
+}
+
+function expectOptionalCount(value: unknown, number: number, field: string, max: number) {
+  if (value !== undefined && (!Number.isInteger(value) || (value as number) < 1 || (value as number) > max)) {
+    throw new LinkError(
+      'criterionCount',
+      'Criterion {{number}}: "{{field}}" must be a whole number from 1 to {{max}}',
+      {
+        number,
+        field,
+        max,
+      },
+    );
   }
 }
 
@@ -372,6 +478,7 @@ export function buildSearch(
   criterion: Criterion,
   names: Map<string, string>,
   drugOrderSearchDefinitionKey: string,
+  tests: TestDetails = new Map(),
 ): Search {
   switch (criterion.type) {
     case 'demographics': {
@@ -421,6 +528,25 @@ export function buildSearch(
           ),
         }),
       };
+    }
+    case 'numericObs': {
+      // The Concepts tab with a numeric concept, its comparison and, if any, its window.
+      const details = tests.get(criterion.concept);
+      const search: concepts.ConceptSearch = {
+        concept: {
+          uuid: criterion.concept,
+          name: details?.name ?? 'a test',
+          units: details?.units ?? '',
+          hl7Abbrev: 'NM',
+        },
+        timeModifier: results[criterion.which ?? 'latest'],
+        operator: operators[criterion.operator],
+        value: criterion.value,
+        onOrAfter: toQueryDate(criterion.onOrAfter) || undefined,
+        withinLastMonths: criterion.withinLastMonths,
+        withinLastDays: criterion.withinLastDays,
+      };
+      return { searchParams: concepts.getQueryDetails(search), description: concepts.getDescription(search) };
     }
   }
 }
@@ -499,8 +625,9 @@ export function definitionSearch(
   { criteria }: CohortDefinition,
   names: Map<string, string>,
   drugOrderSearchDefinitionKey: string,
+  tests: TestDetails = new Map(),
 ): Search {
-  const searches = criteria.map((criterion) => buildSearch(criterion, names, drugOrderSearchDefinitionKey));
+  const searches = criteria.map((criterion) => buildSearch(criterion, names, drugOrderSearchDefinitionKey, tests));
   if (searches.length === 1) {
     return searches[0];
   }

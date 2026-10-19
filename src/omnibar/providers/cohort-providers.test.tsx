@@ -19,6 +19,7 @@ import {
   type OmnibarReport,
 } from '../omnibar-contract';
 import { savedSearchCacheMs, savedSearchDelayMs } from '../saved-search.resource';
+import { forgetTestLookups, testLookupDelayMs } from '../test-lookup.resource';
 import CohortBuilderProvider from './cohort-builder.provider';
 import CohortCountProvider from './cohort-count.provider';
 import SavedCohortsProvider from './saved-cohorts.provider';
@@ -66,6 +67,7 @@ function testConfig(): ConfigObject {
       encounterTypes: [{ uuid: admission, label: 'Admission', aliases: ['admission'] }],
       // Its own tests are in vocabulary.resource.test.tsx and below; off here, so requests are only counts.
       serverVocabulary: false,
+      testResults: false,
     },
   };
 }
@@ -375,6 +377,130 @@ describe('CohortCountProvider', () => {
     await settle();
     expect(last().results[0].title).toBe('12 patients');
     expect(requests().filter(({ url }) => url.pathname.endsWith('/program'))).toHaveLength(1);
+  });
+
+  describe('by test results', () => {
+    const viralLoad = '856AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const cd4 = '5497AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const concepts: Record<string, unknown> = {
+      'viral load': {
+        uuid: viralLoad,
+        display: 'HIV viral load',
+        units: 'copies/mL',
+        datatype: { hl7Abbreviation: 'NM' },
+        names: [{ name: 'Viral load', locale: 'en' }],
+      },
+      cd4: {
+        uuid: cd4,
+        display: 'CD4 count',
+        units: 'cells/µL',
+        datatype: { hl7Abbreviation: 'NM' },
+        names: [{ name: 'CD4', locale: 'en' }],
+      },
+    };
+
+    beforeEach(() => {
+      forgetTestLookups();
+      useTestConfig((config) => ({ ...config, omnibar: { ...config.omnibar, testResults: true } }));
+      mockOpenmrsFetch.mockImplementation(async (url: string) => {
+        const requested = new URL(url, 'http://localhost');
+        if (requested.pathname.endsWith('/concept')) {
+          const match = concepts[requested.searchParams.get('q')];
+          return { data: { results: match ? [match] : [] } } as FetchResponse;
+        }
+        return { data: { result: { memberIds: [1, 2, 3, 4] } } } as FetchResponse;
+      });
+    });
+
+    const lookups = () => requests().filter(({ url }) => url.pathname.endsWith('/concept'));
+    const counts = () => requests().filter(({ url }) => url.pathname.endsWith('/adhocquery'));
+
+    it("looks the test up by name, then counts it in the concept's units, as the builder will", async () => {
+      const { last } = renderProvider(CohortCountProvider, 'women with viral load over 1000');
+      expect(last()).toMatchObject({ status: 'idle' });
+      await settle(testLookupDelayMs);
+      expect(lookups().map(({ url }) => url.searchParams.get('q'))).toEqual(['viral load']);
+
+      expect(last().results[0]).toMatchObject({
+        title: 'Counting…',
+        subtitle: 'Female Patients that are alive AND Patients with most recent HIV viral load > 1000 copies/mL',
+      });
+      await settle();
+      expect(counts()).toHaveLength(1);
+      expect(counts()[0].body.rowFilters.at(-1)).toEqual(
+        expect.objectContaining({
+          key: 'reporting.library.cohortDefinition.builtIn.numericObsSearchAdvanced',
+          parameterValues: { timeModifier: 'LAST', question: viralLoad, operator1: 'GREATER_THAN', value1: '1000' },
+        }),
+      );
+      expect(last().results[0].title).toBe('4 patients');
+      expect(decodeDefinition((last().results[0].target as { to: string }).to).criteria.at(-1)).toEqual({
+        type: 'numericObs',
+        concept: viralLoad,
+        operator: 'gt',
+        value: 1000,
+      });
+    });
+
+    it('looks up each test in turn for two in one question', async () => {
+      const { last } = renderProvider(CohortCountProvider, 'viral load > 1000 and cd4 < 200');
+      await settle(testLookupDelayMs);
+      await settle(testLookupDelayMs);
+      expect(lookups().map(({ url }) => url.searchParams.get('q'))).toEqual(['viral load', 'cd4']);
+      expect(last().results[0].subtitle).toBe(
+        'Patients with most recent HIV viral load > 1000 copies/mL AND Patients with most recent CD4 count < 200 cells/µL',
+      );
+    });
+
+    it("offers nothing for a unit that is not the concept's", async () => {
+      const { last } = renderProvider(CohortCountProvider, 'viral load over 1000 copies');
+      await settle(testLookupDelayMs);
+      await settle();
+      expect(last()).toMatchObject({ status: 'idle' });
+      expect(counts()).toHaveLength(0);
+    });
+
+    it('never looks up a name the parser did not ask about, nor anything while turned off', async () => {
+      const { rerender } = renderProvider(CohortCountProvider, 'Mary Achieng');
+      await settle(testLookupDelayMs);
+      expect(lookups()).toHaveLength(0);
+      useTestConfig((config) => ({ ...config, omnibar: { ...config.omnibar, testResults: false } }));
+      rerender('women with viral load over 1000');
+      await settle(testLookupDelayMs);
+      expect(lookups()).toHaveLength(0);
+    });
+
+    it('offers the test being typed as a completion, from the lookup, before the question reads', async () => {
+      concepts.vir = concepts['viral load'];
+      const { last } = renderProvider(CohortCountProvider, 'women with vir');
+      await settle(testLookupDelayMs);
+      expect(last()).toMatchObject({ query: 'women with vir', status: 'idle' });
+      expect(last().completions).toEqual([
+        { insert: 'Viral load ', replace: 3, label: 'Viral load', detail: 'HIV viral load · copies/mL' },
+      ]);
+    });
+
+    it('offers a known program after enrolled in, with no request', async () => {
+      const { last } = renderProvider(CohortCountProvider, 'women enrolled in hi');
+      expect(last().completions).toEqual([{ insert: 'HIV Program ', replace: 2, label: 'HIV Program' }]);
+      await settle(testLookupDelayMs);
+      expect(lookups()).toHaveLength(0);
+    });
+
+    it('offers no completion for a name, or inside a chart', async () => {
+      const { last, rerender } = renderProvider(CohortCountProvider, 'patients with Mary Ach');
+      await settle(testLookupDelayMs);
+      expect(last().completions ?? []).toEqual([]);
+      rerender('women enrolled in hi', inChart);
+      expect(last().completions ?? []).toEqual([]);
+      expect(lookups()).toHaveLength(0);
+    });
+
+    it('never looks up a test for text shaped like an identifier', async () => {
+      renderProvider(CohortCountProvider, 'vl > 1000', global, { looksLikeIdentifier: true });
+      await settle(testLookupDelayMs);
+      expect(lookups()).toHaveLength(0);
+    });
   });
 
   it('formats the count for the locale the host gives', async () => {

@@ -1,5 +1,5 @@
 import { openmrsFetch, restBaseUrl } from '@openmrs/esm-framework';
-import { type CohortDefinition, isUuid } from './url-definition';
+import { type CohortDefinition, isUuid, type TestDetails } from './url-definition';
 
 /**
  * Looks up display names for the programs, drugs and encounter types in a definition, for history descriptions only.
@@ -38,4 +38,40 @@ export async function fetchDisplayNames(definition: CohortDefinition): Promise<M
       }),
   );
   return names;
+}
+
+/**
+ * The name, units and datatype of each test result's concept in a definition. A concept that can't
+ * be loaded is left out, and the link then refuses to run.
+ */
+export async function fetchTestDetails(definition: CohortDefinition): Promise<TestDetails> {
+  const uuids = [
+    ...new Set(
+      definition.criteria.flatMap((criterion) => (criterion.type === 'numericObs' ? [criterion.concept] : [])),
+    ),
+  ];
+  const tests: TestDetails = new Map();
+  await Promise.all(
+    uuids
+      .filter((uuid) => isUuid(uuid))
+      .map(async (uuid) => {
+        try {
+          const { data } = await openmrsFetch<{
+            display?: unknown;
+            units?: unknown;
+            datatype?: { hl7Abbreviation?: unknown };
+          }>(`${restBaseUrl}/concept/${uuid}?v=custom:(display,units,datatype:(hl7Abbreviation))`);
+          if (typeof data?.display === 'string' && typeof data.datatype?.hl7Abbreviation === 'string') {
+            tests.set(uuid, {
+              name: data.display,
+              units: typeof data.units === 'string' ? data.units : '',
+              hl7Abbrev: data.datatype.hl7Abbreviation,
+            });
+          }
+        } catch {
+          // Left out, so the link refuses to run.
+        }
+      }),
+  );
+  return tests;
 }

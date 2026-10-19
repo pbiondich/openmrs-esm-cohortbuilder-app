@@ -38,6 +38,23 @@ const phraseLists = [
   'programNouns',
   'drugVerbs',
   'encounterNouns',
+  'testUnder',
+  'testAtMost',
+  'testOver',
+  'testAtLeast',
+  'testEquals',
+  'resultLatest',
+  'resultFirst',
+  'resultLowest',
+  'resultHighest',
+  'resultAny',
+  'resultAverage',
+  'windowStart',
+  'windowDays',
+  'windowWeeks',
+  'windowMonths',
+  'windowYears',
+  'since',
 ] as const;
 
 export type PhraseList = (typeof phraseLists)[number];
@@ -88,13 +105,16 @@ export function tokenize(text: string, commas = false): Array<string> | null {
     .replace(/[–—−]/g, '-')
     .replace(/≤/g, '<=')
     .replace(/≥/g, '>=')
+    // "1,000" and "49.5" stay numbers; any other full stop is only punctuation.
+    .replace(/(\d),(?=\d{3}(?!\d))/g, '$1')
+    .replace(/\.(?!\d)|(?<!\d)\./g, ' ')
     .replace(/;/g, ',')
-    .replace(commas ? /[.:!?()"]/g : /[,.:!?()"]/g, ' ')
+    .replace(commas ? /[:!?()"]/g : /[,:!?()"]/g, ' ')
     .replace(/(<=|>=|=<|=>|<|>|=|\+|-|\/|,)/g, ' $1 ')
     // "30y", "15yo", "u5": numbers and words apart.
     .replace(/(\d)(\p{L})/gu, '$1 $2')
     .replace(/(\p{L})(\d)/gu, '$1 $2');
-  if (!/^[\p{L}\p{M}\d+<>=/\s,-]*$/u.test(normalized)) {
+  if (!/^[\p{L}\p{M}\d.+<>=/\s,-]*$/u.test(normalized)) {
     return null;
   }
   return normalized
