@@ -13,6 +13,7 @@ const cohortUuid = 'f4c0b5a2-3c84-4c76-bb7e-6c1b1b2e5a11';
 const queryUuid = '0d1b7a4e-6f3c-4b3a-9c3e-2a6f5a8b9c10';
 const patientUuid = '8673ee4f-e2ab-4077-ba55-4980f408773e';
 const missingUuid = '11111111-2222-4333-8444-555555555555';
+const encounterTypeUuid = 'e22e39fd-7db2-45e7-80f1-60fa0d5a4378';
 
 // The search tabs are not involved in opening a link and are slow to render.
 vi.mock('../components/search-by-concepts/search-by-concepts.component', () => ({ default: () => null }));
@@ -72,6 +73,9 @@ function mockServer() {
     }
     if (url.includes(`/program/${programUuid}`)) {
       return { data: { display: 'HIV Care and Treatment' } } as never;
+    }
+    if (url.includes(`/encountertype/${encounterTypeUuid}`)) {
+      return { data: { display: 'Adult Visit' } } as never;
     }
     if (url.includes(`/drug/${drugUuid}`)) {
       throw new Error('Not found');
@@ -157,6 +161,22 @@ describe('useUrlDefinition', () => {
 
     expect(window.location.search).toBe('?tab=1');
     expect(await screen.findByText('Jane Doe 3')).toBeInTheDocument();
+  });
+
+  it('searches encounter types, named from the server', async () => {
+    openBuilderAt(`?definition=${encode({ v: 1, criteria: [{ type: 'encounter', encounterTypes: [encounterTypeUuid] }] })}`);
+
+    await waitFor(() => expect(history()).toHaveLength(1));
+    expect(history()[0].description).toBe('Patients with Encounter of Types Adult Visit');
+    expect(mockOpenmrsFetch).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`/encountertype/${encounterTypeUuid}\\?v=custom:\\(display\\)$`)),
+    );
+    expect(adHocQueryBodies()[0].rowFilters).toEqual([
+      expect.objectContaining({
+        key: 'reporting.library.cohortDefinition.builtIn.encounterSearchAdvanced',
+        parameterValues: { encounterTypeList: [encounterTypeUuid] },
+      }),
+    ]);
   });
 
   it('composes only its own entries when a search from a tab lands in between', async () => {
