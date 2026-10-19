@@ -176,6 +176,14 @@ describe('the server vocabulary', () => {
     expect(mockOpenmrsFetch).toHaveBeenCalledTimes(4);
   });
 
+  it("forgets one user's vocabulary as soon as the user changes, even with no bar open", async () => {
+    renderHook(() => useServerVocabulary(true, 'en')).unmount();
+    await flush();
+    expect(hasServerVocabulary()).toBe(true);
+    getSessionStore().setState({ loaded: true, session: { authenticated: false } as never });
+    expect(hasServerVocabulary()).toBe(false);
+  });
+
   it('asks nothing while turned off', async () => {
     const { result } = renderHook(() => useServerVocabulary(false, 'en'));
     await flush();
