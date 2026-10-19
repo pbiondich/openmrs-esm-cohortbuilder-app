@@ -444,6 +444,31 @@ describe('the English table holds together', () => {
   });
 });
 
+describe('names from config or the server', () => {
+  it('ignores a name that would take a negation or an alternative, so the question still gives nothing', () => {
+    const named: CohortCriteriaConfig = {
+      ...config,
+      programs: [
+        ...config.programs,
+        { uuid: '1d2e3f40-1111-4222-8333-444455556666', label: 'Not HIV Program', aliases: ['Not HIV', 'Or'] },
+      ],
+      drugGroups: [{ ...config.drugGroups[0], aliases: ['arvs', 'no arvs'] }],
+      encounterTypes: [{ uuid: admission, label: 'Non Admission', aliases: ['admission'] }],
+    };
+    const texts = [
+      'patients not HIV program',
+      'enrolled in not HIV',
+      'patients or program',
+      'or clinic',
+      'patients on no ARVs',
+      'patients with a non admission encounter',
+    ];
+    expect(texts.map((text) => [text, parseCohortCriteria(text, named)])).toEqual(texts.map((text) => [text, null]));
+    expect(parseCohortCriteria('patients in the HIV program on ARVs', named)?.criteria).toEqual([inHiv, onArvs]);
+    expect(parseCohortCriteria('patients with an admission encounter', named)?.criteria).toEqual([admitted]);
+  });
+});
+
 describe("a site's own phrases", () => {
   it('adds phrases and age groups from config', () => {
     const phrases = compilePhrases(undefined, {
