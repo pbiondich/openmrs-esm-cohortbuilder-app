@@ -207,14 +207,57 @@ describe('the server vocabulary', () => {
     expect(retried.current.programs).toHaveLength(3);
   });
 
-  it('keeps one list when only one of the two answers', async () => {
+  it('keeps the list that answered and asks again next time for the one that failed', async () => {
+    let failures = 1;
     mockOpenmrsFetch.mockImplementation(async (url: string) => {
       if (url.includes('/program?')) return { data: programs } as FetchResponse;
-      throw Object.assign(new Error('Forbidden'), { response: { status: 403 } });
+      if (failures-- > 0) throw Object.assign(new Error('Service Unavailable'), { response: { status: 503 } });
+      return { data: encounterTypes } as FetchResponse;
     });
     const { result } = renderHook(() => useServerVocabulary(true, 'en'));
     await flush();
     expect(result.current.programs).toHaveLength(3);
     expect(result.current.encounterTypes).toEqual([]);
+
+    const { result: next } = renderHook(() => useServerVocabulary(true, 'en'));
+    await flush();
+    expect(next.current.programs).toHaveLength(3);
+    expect(next.current.encounterTypes).toHaveLength(2);
+    const paths = mockOpenmrsFetch.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname);
+    expect(paths.map((path) => path.split('/').at(-1))).toEqual(['program', 'encountertype', 'encountertype']);
+  });
+
+  it("knows the programs by name when the server can't give their concepts, never saying why", async () => {
+    mockOpenmrsFetch.mockImplementation(async (url: string) => {
+      if (url.includes('concept')) {
+        throw Object.assign(new Error('No row with the given identifier exists: [org.openmrs.Concept#5]'), {
+          response: { status: 400 },
+        });
+      }
+      if (url.includes('/program?')) {
+        return { data: { results: [{ uuid: tb, name: 'TB Program', retired: false }] } } as FetchResponse;
+      }
+      return { data: encounterTypes } as FetchResponse;
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    onTestFinished(() => error.mockRestore());
+    const { result } = renderHook(() => useServerVocabulary(true, 'en'));
+    await flush();
+    expect(result.current).toEqual({
+      programs: [{ uuid: tb, label: 'TB Program', aliases: ['TB'] }],
+      encounterTypes: toServerVocabulary(null, encounterTypes, 'en').encounterTypes,
+    });
+    expect(error).not.toHaveBeenCalled();
+
+    renderHook(() => useServerVocabulary(true, 'en'));
+    await flush();
+    const programUrls = mockOpenmrsFetch.mock.calls
+      .map(([url]) => new URL(url, 'http://localhost'))
+      .filter(({ pathname }) => pathname.endsWith('/program'));
+    expect(programUrls.map((url) => url.searchParams.get('v'))).toEqual([
+      'custom:(uuid,name,retired,concept:(names:(name,locale)))',
+      'custom:(uuid,name,retired)',
+    ]);
+    expect(programUrls.every((url) => url.searchParams.get('limit') === '100')).toBe(true);
   });
 });
