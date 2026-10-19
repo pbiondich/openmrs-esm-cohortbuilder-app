@@ -51,7 +51,6 @@ export const createCompositionQuery = (compositionQuery: string) =>
 
 /** ANDs queries in hand exactly as the Composition tab ANDs the same searches from the history. */
 export const composeQueries = (queries: Array<Query>) =>
-  composeOperands(
-    queries.map((_, index) => index + 1).join(' AND '),
-    (position) => JSON.parse(JSON.stringify(queries[position - 1])),
+  composeOperands(queries.map((_, index) => index + 1).join(' AND '), (position) =>
+    JSON.parse(JSON.stringify(queries[position - 1])),
   );

@@ -9,8 +9,6 @@
   "atLeast": "at least",
   "average": "Average",
   "birthDate": "Birth date between",
-  "buildCohortPrefix": "Build cohort:",
-  "buildCohortSubtitle": "Runs this search in the Cohort Builder",
   "clearHistory": "Clear history",
   "clearing": "Clearing",
   "clearItemFromHistory": "Clear item from search history",
@@ -90,7 +88,18 @@
   "noOfResultsFound_one": "{{count}} results found",
   "noOfResultsFound_other": "{{count}} results found",
   "numberIsNotValid": "Number is not valid",
+  "omnibarCohortCount": "Patient count",
+  "omnibarCohortCountPatients_one": "{{formattedCount}} patient",
+  "omnibarCohortCountPatients_other": "{{formattedCount}} patients",
   "omnibarCohorts": "Cohorts",
+  "omnibarCommand": {
+    "cohort": {
+      "aliases": "cohort, count",
+      "description": "Count patients by age, gender, program or encounter type",
+      "label": "Cohorts"
+    }
+  },
+  "omnibarCounting": "Counting…",
   "omnibarSavedCohorts": "Saved cohorts",
   "omnibarSavedQueries": "Saved queries",
   "openInCohortBuilder": "Open in the Cohort Builder",

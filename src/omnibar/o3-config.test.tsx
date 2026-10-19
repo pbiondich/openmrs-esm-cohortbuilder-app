@@ -15,7 +15,7 @@ import { registerExtensionRendering, unregisterExtensionRendering } from '@openm
 import { ComponentContext, useConfig as realUseConfig } from '@openmrs/esm-react-utils';
 import { configSchema } from '../config-schema';
 import { OMNIBAR_CONTRACT_VERSION, type OmnibarReport } from './omnibar-contract';
-import CohortCriteriaProvider from './providers/cohort-criteria.provider';
+import CohortCountProvider from './providers/cohort-count.provider';
 
 // The providers import useConfig from the framework, which tests alias to its mock. Here it is the real
 // hook, reading the real config store.
@@ -34,7 +34,7 @@ vi.mock('react-i18next', async () => {
 
 const moduleName = '@openmrs/esm-cohort-builder-app';
 const slotName = 'omnibar-providers-slot';
-const extensionId = 'omnibar-cohort-criteria-provider';
+const extensionId = 'omnibar-cohort-count-provider';
 const unknownKey = `Unknown config key '${moduleName}.drugCriteriaEnabled' provided. Ignoring.`;
 
 // o3's /openmrs/spa/custom/config.json, as far as this module is concerned.
@@ -88,7 +88,7 @@ describe("o3's config for the cohort row, through the real config system", () =>
     expect(unknownKeyLogs()).toBe(logsBeforeSchema);
   });
 
-  it('gives the mounted provider drugCriteriaEnabled, so "patients on ARVs" is a cohort row', () => {
+  it('gives the mounted provider drugCriteriaEnabled, so "how many patients on ARVs" is a count row', () => {
     provide(o3Config, '/openmrs/spa/custom/config.json');
     registerModuleWithConfigSystem(moduleName);
     registerExtensionRendering({
@@ -111,8 +111,8 @@ describe("o3's config for the cohort row, through the real config system", () =>
           extension: { extensionSlotName: slotName, extensionSlotModuleName: '@openmrs/esm-omnibar-app', extensionId },
         }}
       >
-        <CohortCriteriaProvider
-          query="patients on ARVs"
+        <CohortCountProvider
+          query="how many patients on ARVs"
           context={{ scope: 'global', locale: 'en', workspaceGroup: null }}
           report={report}
           hints={{ looksLikeIdentifier: false }}
@@ -122,8 +122,8 @@ describe("o3's config for the cohort row, through the real config system", () =>
     );
 
     expect(report.mock.calls.at(-1)[0]).toMatchObject({
-      status: 'ready',
-      results: [{ title: 'Build cohort: Patients on ARVs' }],
+      status: 'loading',
+      results: [{ title: 'Counting…', subtitle: expect.stringMatching(/^Patients who taking 13 drugs on or after /) }],
     });
   });
 });

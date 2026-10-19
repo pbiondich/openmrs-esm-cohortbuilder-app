@@ -44,8 +44,8 @@ const bounded =
   (name: string) =>
   ({ default: Provider }) => ({ default: withProviderBoundary(Provider, name) });
 
-export const cohortCriteriaOmnibarProvider = getAsyncLifecycle(
-  () => import('./omnibar/providers/cohort-criteria.provider').then(bounded('omnibar-cohort-criteria-provider')),
+export const cohortCountOmnibarProvider = getAsyncLifecycle(
+  () => import('./omnibar/providers/cohort-count.provider').then(bounded('omnibar-cohort-count-provider')),
   options,
 );
 

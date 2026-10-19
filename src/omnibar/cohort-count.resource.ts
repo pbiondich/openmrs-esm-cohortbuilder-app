@@ -1,0 +1,142 @@
+import { useEffect, useRef, useState } from 'react';
+import { openmrsFetch, restBaseUrl } from '@openmrs/esm-framework';
+import type { Query } from '../types';
+import { isUuid } from '../url-definition/url-definition';
+import { isServerUnreachable } from './omnibar-contract';
+import { isPlainObject } from './saved-search.resource';
+
+/**
+ * Counts a cohort without fetching a row per member, as the builder's own search does. A definition
+ * that is one program enrollment search asks reportingrest's evaluated cohort resource for its `ref`
+ * representation, which carries the count and no members. Anything else is evaluated as the ad hoc
+ * query the builder would run, with `v=rowFilters` and no columns: reportingrest then returns the
+ * matching ids without evaluating any data for them, and the count is how many there are. reportingrest
+ * has no count-only evaluation for a composition yet.
+ *
+ * The enrollment search is the one built-in definition whose other parameters are optional, so a GET
+ * can leave them out; the age and encounter definitions require every parameter on a GET.
+ */
+
+const enrollmentKey = 'reporting.library.cohortDefinition.builtIn.patientsWithEnrollment';
+
+/** The programs, when the query is exactly one enrollment search by programs alone. */
+function enrollmentPrograms({ rowFilters, customRowFilterCombination }: Query): Array<string> | null {
+  if (rowFilters.length !== 1 || rowFilters[0].key !== enrollmentKey || customRowFilterCombination.trim() !== '1') {
+    return null;
+  }
+  // As the request would carry them: the search tabs leave unset parameters undefined.
+  const { programs, ...others } = JSON.parse(JSON.stringify(rowFilters[0].parameterValues ?? {}));
+  return Object.keys(others).length === 0 && Array.isArray(programs) && programs.length > 0 && programs.every(isUuid)
+    ? programs
+    : null;
+}
+
+/** An answer that doesn't say how many: a plain error, never shown. */
+export class UnreadableCountError extends Error {}
+
+function readCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new UnreadableCountError('The count could not be read');
+  }
+  return value;
+}
+
+export async function countCohort(query: Query, signal?: AbortSignal): Promise<number> {
+  const programs = enrollmentPrograms(query);
+  if (programs) {
+    const params = new URLSearchParams({ v: 'ref' });
+    programs.forEach((program) => params.append('programs', program));
+    const { data } = await openmrsFetch<unknown>(`${restBaseUrl}/reportingrest/cohort/${enrollmentKey}?${params}`, {
+      signal,
+    });
+    return readCount(isPlainObject(data) ? data.count : undefined);
+  }
+
+  const { data } = await openmrsFetch<unknown>(`${restBaseUrl}/reportingrest/adhocquery?v=rowFilters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: { ...query, columns: [] },
+    signal,
+  });
+  const memberIds = isPlainObject(data) && isPlainObject(data.result) ? data.result.memberIds : undefined;
+  if (!Array.isArray(memberIds)) {
+    throw new UnreadableCountError('The count could not be read');
+  }
+  return memberIds.length;
+}
+
+const maxCachedCounts = 50;
+// For the session: a count is asked for once per key. The key carries the day, since ages and "today" move.
+const counts = new Map<string, number>();
+
+function remember(key: string, count: number) {
+  counts.delete(key);
+  counts.set(key, count);
+  if (counts.size > maxCachedCounts) {
+    counts.delete(counts.keys().next().value);
+  }
+}
+
+export interface CohortCountState {
+  key: string | null;
+  count?: number;
+  loading: boolean;
+  error: boolean;
+  /** The request failed because the server couldn't be reached. */
+  unavailable: boolean;
+}
+
+const settled = (key: string | null, count?: number): CohortCountState => ({
+  key,
+  count,
+  loading: false,
+  error: false,
+  unavailable: false,
+});
+
+/** Settled with the remembered count, or loading for a key not yet counted. */
+const initial = (key: string | null) =>
+  key && counts.has(key) ? settled(key, counts.get(key)) : { ...settled(key), loading: Boolean(key) };
+
+/**
+ * The count of `query`, asked for once the same `key` has been in place for `delayMs`, so the server
+ * isn't asked per keystroke. A key the user has moved past is aborted and its answer ignored. The
+ * query is read when the count is asked for; one key must always stand for the same cohort.
+ */
+export function useCohortCount(key: string | null, query: Query | null, delayMs: number): CohortCountState {
+  const [state, setState] = useState<CohortCountState>(() => initial(key));
+  const queryRef = useRef(query);
+  queryRef.current = query;
+
+  useEffect(() => {
+    if (!key || !queryRef.current || counts.has(key)) {
+      setState(initial(key));
+      return;
+    }
+
+    setState(initial(key));
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      countCohort(queryRef.current, controller.signal).then(
+        (count) => {
+          if (controller.signal.aborted) return;
+          remember(key, count);
+          setState(settled(key, count));
+        },
+        (error: unknown) => {
+          if (!controller.signal.aborted) {
+            setState({ ...settled(key), error: true, unavailable: isServerUnreachable(error) });
+          }
+        },
+      );
+    }, Math.max(0, delayMs));
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [key, delayMs]);
+
+  // Until the effect has caught up with a new key, the old state answers a different question.
+  return state.key === key ? state : initial(key);
+}
