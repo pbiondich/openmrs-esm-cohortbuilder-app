@@ -93,7 +93,7 @@ function renderProvider(
   const rerender = (next: string, nextContext = context, nextHints = hints) =>
     view.rerender(<Provider {...props(next, nextContext, nextHints)} />);
   const last = () => report.mock.calls.at(-1)[0];
-  return { report, rerender, last };
+  return { report, rerender, last, unmount: view.unmount };
 }
 
 const decodeDefinition = (to: string) => {
@@ -462,9 +462,10 @@ describe('CohortCountProvider', () => {
       getSessionStore().setState({ loaded: false, session: null });
     });
     loggedIn('a1b2c3d4-0000-4000-8000-00000000000a');
-    renderProvider(CohortCountProvider, 'women under 30');
+    const { unmount } = renderProvider(CohortCountProvider, 'women under 30');
     await settle();
     expect(requests()).toHaveLength(1);
+    unmount();
 
     loggedIn(null);
     loggedIn('a1b2c3d4-0000-4000-8000-00000000000b');
@@ -493,6 +494,29 @@ describe('CohortCountProvider', () => {
     expect(last()).toMatchObject({ status: 'ready' });
     expect(last().results[0].title).toBe('3 patients');
     expect(report.mock.calls.map(([sent]) => sent.results?.[0]?.title)).not.toContain('7 patients');
+  });
+
+  it('never shows the next user a count already on a mounted row, and asks again for them', async () => {
+    const loggedIn = (uuid: string) =>
+      getSessionStore().setState({ loaded: true, session: { authenticated: true, user: { uuid } } as never });
+    onTestFinished(() => {
+      getSessionStore().setState({ loaded: false, session: null });
+    });
+    loggedIn('a1b2c3d4-0000-4000-8000-00000000000a');
+    answer({ ids: [1, 2, 3, 4, 5, 6, 7] });
+    const { last, report } = renderProvider(CohortCountProvider, 'women under 30');
+    await settle();
+    expect(last().results[0].title).toBe('7 patients');
+
+    answer();
+    const seenByA = report.mock.calls.length;
+    await act(async () => loggedIn('a1b2c3d4-0000-4000-8000-00000000000b'));
+    await settle();
+    const seenByB = report.mock.calls.slice(seenByA).map(([sent]) => sent.results?.[0]?.title);
+    expect(seenByB).not.toContain('7 patients');
+    expect(seenByB).toContain('Counting…');
+    expect(last().results[0].title).toBe('3 patients');
+    expect(requests()).toHaveLength(2);
   });
 
   it('stops asking again after three changes of user during one count, with a plain error', async () => {
@@ -530,7 +554,21 @@ describe('CohortCountProvider', () => {
   it.each([
     ['fetch failing', new TypeError('Failed to fetch')],
     ['a gateway timeout', Object.assign(new Error('Gateway Timeout'), { response: { status: 504 } })],
-  ])('says it is unavailable, and no more, on %s', async (_, error) => {
+    [
+      'a request the server refuses',
+      Object.assign(new Error('Failed to evaluate: women 15-49'), {
+        response: { status: 400 },
+        responseBody: { error: { message: 'Failed to evaluate: women 15-49' } },
+      }),
+    ],
+    [
+      'a server error',
+      Object.assign(new Error('NullPointerException in CohortDefinitionService'), {
+        response: { status: 500 },
+        responseBody: { error: { message: 'NullPointerException in CohortDefinitionService' } },
+      }),
+    ],
+  ])("says it is unavailable, and no more, never with the server's message, on %s", async (_, error) => {
     mockOpenmrsFetch.mockRejectedValue(error);
     const { last } = renderProvider(CohortCountProvider, 'women');
     await settle();
@@ -540,15 +578,6 @@ describe('CohortCountProvider', () => {
       status: 'error',
       detail: { state: 'unavailable' },
     });
-  });
-
-  it("reports any other failure as a plain error, never with the server's message", async () => {
-    mockOpenmrsFetch.mockRejectedValue(
-      Object.assign(new Error('Failed to evaluate: women 15-49'), { response: { status: 400 } }),
-    );
-    const { last } = renderProvider(CohortCountProvider, 'women');
-    await settle();
-    expect(last()).toEqual({ query: 'women', title: 'Patient count', status: 'error' });
   });
 
   it.each<[string, { count?: unknown; ids?: unknown }, string]>([
