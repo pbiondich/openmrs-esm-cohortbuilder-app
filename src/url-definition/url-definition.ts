@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
-import type { DropdownValue, SearchParams } from '../types';
+import type { DropdownValue, DrugOrderDetails, SearchParams } from '../types';
+import { composeQueries } from '../components/composition/composition.utils';
 import * as demographics from '../components/search-by-demographics/search-by-demographics.utils';
 import * as drugOrders from '../components/search-by-drug-orders/search-by-drug-orders.utils';
 import * as encounters from '../components/search-by-encounters/search-by-encounters.utils';
@@ -374,25 +375,11 @@ export function buildSearch(
 ): Search {
   switch (criterion.type) {
     case 'demographics': {
-      const params = {
-        gender: { male: 'males', female: 'females', any: 'all' }[criterion.gender],
-        minAge: criterion.minAge ?? 0,
-        maxAge: criterion.maxAge ?? 0,
-        birthDayStartDate: '',
-        birthDayEndDate: '',
-        livingStatus: 'alive',
-      };
+      const params = demographicsValues(criterion);
       return { searchParams: demographics.getQueryDetails(params), description: demographics.getDescription(params) };
     }
     case 'enrollment': {
-      const params = {
-        enrolledOnOrAfter: toQueryDate(criterion.enrolledOnOrAfter),
-        enrolledOnOrBefore: toQueryDate(criterion.enrolledOnOrBefore),
-        completedOnOrAfter: '',
-        completedOnOrBefore: '',
-        selectedPrograms: toDropdownValues(criterion.programs, names),
-        selectedLocations: null,
-      };
+      const params = enrollmentValues(criterion, names);
       return {
         searchParams: enrollments.getQueryDetails(params),
         description: enrollments.getDescription({
@@ -402,14 +389,7 @@ export function buildSearch(
       };
     }
     case 'drugOrder': {
-      const params = {
-        selectedDrugs: toDropdownValues(criterion.drugs, names),
-        selectedCareSetting: null,
-        activeOnOrAfter: toQueryDate(criterion.activeOnOrAfter),
-        activeOnOrBefore: toQueryDate(criterion.activeOnOrBefore),
-        activatedOnOrAfter: '',
-        activatedOnOrBefore: '',
-      };
+      const params = drugOrderValues(criterion, names);
       return {
         searchParams: drugOrders.getQueryDetails(params, drugOrderSearchDefinitionKey),
         description: drugOrders.getDescription({
@@ -445,9 +425,89 @@ export function buildSearch(
   }
 }
 
+/** What the search tabs hold for a definition; each tab searches for exactly what buildSearch does. */
+export interface FormValues {
+  demographics?: demographics.Demographics;
+  enrollment?: enrollments.EnrollmentsSearchParams;
+  drugOrder?: DrugOrderDetails;
+}
+
+/**
+ * Fills each tab with the first criterion of its type, since a tab holds one search. Programs and
+ * drugs are labelled with `names`, or with their uuid when the name is missing.
+ */
+export function toFormValues({ criteria }: CohortDefinition, names: Map<string, string>): FormValues {
+  const first = <T extends Criterion['type']>(type: T) =>
+    criteria.find((criterion): criterion is Extract<Criterion, { type: T }> => criterion.type === type);
+  const demographicsCriterion = first('demographics');
+  const enrollmentCriterion = first('enrollment');
+  const drugOrderCriterion = first('drugOrder');
+  return {
+    demographics: demographicsCriterion && demographicsValues(demographicsCriterion),
+    enrollment: enrollmentCriterion && enrollmentValues(enrollmentCriterion, names),
+    drugOrder: drugOrderCriterion && drugOrderValues(drugOrderCriterion, names),
+  };
+}
+
+function demographicsValues(criterion: DemographicsCriterion): demographics.Demographics {
+  return {
+    gender: { male: 'males', female: 'females', any: 'all' }[criterion.gender],
+    // The demographics tab reads an age of 0 as "no bound".
+    minAge: criterion.minAge ?? 0,
+    maxAge: criterion.maxAge ?? 0,
+    birthDayStartDate: '',
+    birthDayEndDate: '',
+    livingStatus: 'alive',
+  };
+}
+
+function enrollmentValues(
+  criterion: EnrollmentCriterion,
+  names: Map<string, string>,
+): enrollments.EnrollmentsSearchParams {
+  return {
+    enrolledOnOrAfter: toQueryDate(criterion.enrolledOnOrAfter),
+    enrolledOnOrBefore: toQueryDate(criterion.enrolledOnOrBefore),
+    completedOnOrAfter: '',
+    completedOnOrBefore: '',
+    selectedPrograms: toDropdownValues(criterion.programs, names),
+    selectedLocations: null,
+  };
+}
+
+function drugOrderValues(criterion: DrugOrderCriterion, names: Map<string, string>): DrugOrderDetails {
+  return {
+    selectedDrugs: toDropdownValues(criterion.drugs, names),
+    selectedCareSetting: null,
+    activeOnOrAfter: toQueryDate(criterion.activeOnOrAfter),
+    activeOnOrBefore: toQueryDate(criterion.activeOnOrBefore),
+    activatedOnOrAfter: '',
+    activatedOnOrBefore: '',
+  };
+}
+
 /** A definition's description: each criterion's, as its search tab words it, ANDed. */
 export function describeSearches(searches: Search[]): string {
   return searches.map(({ description }) => description).join(' AND ');
+}
+
+/**
+ * The whole definition as one search: what a link runs last, its criteria's searches composed as the
+ * Composition tab composes them, so a count of it is the count the builder then shows.
+ */
+export function definitionSearch(
+  { criteria }: CohortDefinition,
+  names: Map<string, string>,
+  drugOrderSearchDefinitionKey: string,
+): Search {
+  const searches = criteria.map((criterion) => buildSearch(criterion, names, drugOrderSearchDefinitionKey));
+  if (searches.length === 1) {
+    return searches[0];
+  }
+  return {
+    searchParams: composeQueries(searches.map(({ searchParams }) => searchParams.query)),
+    description: describeSearches(searches),
+  };
 }
 
 function toDropdownValues(uuids: string[], names: Map<string, string>): DropdownValue[] {

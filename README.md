@@ -28,6 +28,8 @@ Links can open the builder with a search already run. The page reads one of thes
 
 If several are given, `definition` wins over `cohort`, which wins over `query`; the others are ignored with a console warning. The parameter is removed from the URL (with `history.replaceState`) as soon as it is read, so reloading the page does not run it again. A link opened while the builder is already shown (for example from the omnibar) runs too; if one is still running, the newest waiting link runs after it.
 
+A `definition` link also fills in the Demographics, Enrollments and Drug Order tabs with its criteria (the first of each type, if a type repeats) and shows its first criterion's tab. For a link with one criterion, pressing Search there finds the same patients again and changing one field changes only that. For a link with several, each tab holds only its own criterion and Search runs only the open tab, not their combination; the combination is the composition in the Search History. Each new link fills them in afresh; tabs it has no criterion for are emptied. They are filled in even when the link's search fails, so it can be fixed and run again, while a link that can't be read leaves them as they were. A program or drug missing from its dropdown list is shown with its own name, or its uuid when that can't be found.
+
 ### The definition
 
 ```json
@@ -80,3 +82,33 @@ Until the reporting module ships that definition, a site can provide its own wit
    }
    ```
 
+
+## Omnibar providers
+
+When an omnibar is installed, the builder adds cohort rows to it outside a chart. They are four extensions in `omnibar-providers-slot`, built on the omnibar provider contract version 1 (a copy of the contract folder is in `src/omnibar/omnibar-contract/`; don't edit it). They need an omnibar host that mounts providers from that slot, such as `@openmrs/esm-omnibar-app` with contract 1; an older host that passes no hints works too. Without an omnibar nothing is mounted, and the builder works as before.
+
+| Extension | Order | Row | Privileges |
+| --- | --- | --- | --- |
+| `omnibar-cohort-count-provider` | 20 | The number of patients when the whole text reads as a cohort ("how many women aged 15-49 enrolled in HIV program?"), with what was counted in the builder's own words underneath. It shows "Counting…" first, then the number, and opens the builder with that `?definition=`, which runs it and lists the patients. Text it can't fully read gives no row. It answers `/cohort` and `/count` | Get Patients, Run Reports |
+| `omnibar-cohort-builder-provider` | 30 | "Cohort Builder" for text starting with "cohort", "build cohort", "find patients who" and the like | Get Patients, Run Reports |
+| `omnibar-saved-cohorts-provider` | 40 | Saved cohorts by name (`GET /cohort?q=`), opened with `?cohort=` | Get Patient Cohorts, Get Patients |
+| `omnibar-saved-queries-provider` | 50 | Saved queries by name (`GET /reportingrest/dataSetDefinition?q=[AdHocDataExport]`), opened with `?query=` | View Reports, Run Reports, Get Patients |
+
+- Parsing never calls the server. The count is asked for once the parsed cohort has stayed the same for `omnibar.countDebounceMs`, so rewording ("how many …") keeps the same count; a count the user has typed past is cancelled, and counts are remembered for the session, per day. A program enrollment on its own is counted with `GET /reportingrest/cohort/<patientsWithEnrollment>?v=ref`, which returns only the count; anything else is the builder's own ad hoc query sent with `v=rowFilters` and no columns, which returns the matching ids without evaluating any data for them. reportingrest has no count-only call for a composition yet.
+- The "Cohort Builder" row never calls the server. The saved rows wait for typing to pause, cancel a request that is out of date, and need `omnibar.savedSearchMinCharacters` characters.
+- Text shaped like a patient identifier (such as `100GEJ` or `MRN-1234`) gets no cohort row, so patient search has it to itself.
+- When the server can't be reached, the count and saved groups show one quiet "unavailable" line; any other failure shows the omnibar's own error line, never the server's message.
+- The count row needs Run Reports as well as the Get Patients that reporting's cohort evaluation checks, so no one who can't run the builder's own search sees a count, however small. It is mounted only outside a chart.
+- The links are built and checked against this builder's own decoder, so a row never offers a link the builder would refuse.
+
+Config, in `@openmrs/esm-cohort-builder-app`:
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `omnibar.enabled` | `true` | Off, every row stays empty and nothing is fetched. Removing the extensions with `"omnibar-providers-slot": {"remove": [...]}` works too |
+| `omnibar.savedSearchMinCharacters` | `2` | Characters needed before saved cohorts and queries are searched. At least 1: a lower value is refused and treated as 1 |
+| `omnibar.countDebounceMs` | `600` | How long the parsed cohort must stay the same before it is counted. Not negative |
+| `omnibar.programs` | The RefApp demo programs | Programs the cohort row understands, with aliases ("enrolled in HIV") |
+| `omnibar.encounterTypes` | None (site content) | Encounter types the cohort row understands, with aliases, followed by the word "encounter" ("patients with an admission encounter") |
+| `omnibar.drugGroups` | ARVs (demo formulary), TLD (none on the demo) | Drug groups the cohort row understands ("on ARVs"), as Drug uuids |
+| `drugCriteriaEnabled` | `false` | Whether the server can run drug order searches (see above). Off, "on ARVs" gives no row |

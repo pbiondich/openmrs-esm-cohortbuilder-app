@@ -3,6 +3,7 @@ import { vi, describe, it, expect, type Mock } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { getDefaultsFromConfigSchema, openmrsFetch, showSnackbar, useConfig } from '@openmrs/esm-framework';
 import { type ConfigObject, configSchema } from '../../config-schema';
+import { toFormValues } from '../../url-definition/url-definition';
 import { render, screen } from '@testing-library/react';
 import { useCareSettings, useDrugs } from './search-by-drug-orders.resources';
 import type * as SearchByDrugOrdersResources from './search-by-drug-orders.resources';
@@ -134,7 +135,7 @@ describe('Test the search by drug orders component', () => {
     await user.click(screen.getByText(/select drugs/i));
     await user.click(screen.getByText(mockDrugs[1].label));
     await user.click(screen.getByText(mockDrugs[2].label));
-    await user.click(screen.getByTitle(mockCareSettings[0].label));
+    await user.click(screen.getByText(/select a care setting/i));
     await user.click(screen.getByText(mockCareSettings[2].label));
     await user.click(screen.getByTestId('search-btn'));
 
@@ -142,6 +143,61 @@ describe('Test the search by drug orders component', () => {
       expectedQuery,
       `Patients who taking ${mockDrugs[1].label} and ${mockDrugs[2].label} from Pharmacy`,
     );
+  });
+
+  it.each([
+    ['opened by hand', undefined],
+    [
+      'filled in by a definition link',
+      toFormValues({ v: 1, criteria: [{ type: 'drugOrder', drugs: [mockDrugs[1].value] }] }, new Map()).drugOrder,
+    ],
+  ])('shows no care setting when it searches without one, %s', async (_, initialValues) => {
+    const user = userEvent.setup();
+    mockUseConfig.mockReturnValue(getDefaultsFromConfigSchema(configSchema));
+    // Already loaded, as when the tab mounts again after a definition link.
+    mockUseCareSettings.mockImplementation(() => ({
+      careSettings: mockCareSettings,
+      isLoading: false,
+      careSettingsError: undefined,
+    }));
+    mockUseDrugs.mockImplementation(() => ({ drugs: mockDrugs, isLoading: false, drugsError: undefined }));
+    const mockSubmit = vi.fn();
+
+    render(<SearchByDrugOrder onSubmit={mockSubmit} initialValues={initialValues} />);
+    if (!initialValues) {
+      await user.click(screen.getByText(/select drugs/i));
+      await user.click(screen.getByText(mockDrugs[1].label));
+    }
+
+    expect(screen.getByText(/select a care setting/i)).toBeInTheDocument();
+    expect(screen.queryByTitle(mockCareSettings[0].label)).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('search-btn'));
+    expect(mockSubmit.mock.calls[0][0].query.rowFilters[0].parameterValues).toEqual({ drugs: [mockDrugs[1].value] });
+  });
+
+  it('lets Search run only with a drug, also after Reset clears it', async () => {
+    const user = userEvent.setup();
+    mockUseConfig.mockReturnValue(getDefaultsFromConfigSchema(configSchema));
+    mockUseCareSettings.mockImplementation(() => ({
+      careSettings: mockCareSettings,
+      isLoading: false,
+      careSettingsError: undefined,
+    }));
+    mockUseDrugs.mockImplementation(() => ({ drugs: mockDrugs, isLoading: false, drugsError: undefined }));
+    const mockSubmit = vi.fn();
+
+    render(<SearchByDrugOrder onSubmit={mockSubmit} />);
+    expect(screen.getByTestId('search-btn')).toBeDisabled();
+
+    await user.click(screen.getByText(/select drugs/i));
+    await user.click(screen.getByText(mockDrugs[1].label));
+    await user.keyboard('{Escape}');
+    expect(screen.getByTestId('search-btn')).toBeEnabled();
+
+    await user.click(screen.getByTestId('reset-btn'));
+    expect(screen.getByTestId('search-btn')).toBeDisabled();
+    expect(screen.getByTestId('search-btn')).toHaveTextContent('Search');
+    expect(mockSubmit).not.toHaveBeenCalled();
   });
 
   it('shows a failed drug list once, not on every render', () => {

@@ -1,25 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import dayjs from 'dayjs';
-import { Column, DatePicker, DatePickerInput, MultiSelect } from '@carbon/react';
+import { Column, MultiSelect } from '@carbon/react';
 import { showSnackbar } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import { useLocations } from '../../cohort-builder.resources';
+import { withSelectedItems } from '../../cohort-builder.utils';
 import { type DropdownValue, type SearchByProps } from '../../types';
 import { usePrograms } from './search-by-enrollments.resources';
-import { getQueryDetails, getDescription } from './search-by-enrollments.utils';
+import { type EnrollmentsSearchParams, getQueryDetails, getDescription } from './search-by-enrollments.utils';
 import SearchButtonSet from '../search-button-set/search-button-set';
+import SearchDatePicker from '../search-date-picker/search-date-picker';
 import styles from './search-by-enrollments.style.scss';
 
-const SearchByEnrollments: React.FC<SearchByProps> = ({ onSubmit }) => {
+interface SearchByEnrollmentsProps extends SearchByProps {
+  /** The values to start with, such as a definition link's. */
+  initialValues?: EnrollmentsSearchParams;
+}
+
+const SearchByEnrollments: React.FC<SearchByEnrollmentsProps> = ({ onSubmit, initialValues }) => {
   const { t } = useTranslation();
   const { programs, programsError } = usePrograms();
   const { locations, locationsError } = useLocations();
-  const [enrolledOnOrAfter, setEnrolledOnOrAfter] = useState('');
-  const [enrolledOnOrBefore, setEnrolledOnOrBefore] = useState('');
-  const [completedOnOrAfter, setCompletedOnOrAfter] = useState('');
-  const [completedOnOrBefore, setCompletedOnOrBefore] = useState('');
-  const [selectedLocations, setSelectedLocations] = useState<DropdownValue[]>(null);
-  const [selectedPrograms, setSelectedPrograms] = useState<DropdownValue[]>(null);
+  const [enrolledOnOrAfter, setEnrolledOnOrAfter] = useState(initialValues?.enrolledOnOrAfter ?? '');
+  const [enrolledOnOrBefore, setEnrolledOnOrBefore] = useState(initialValues?.enrolledOnOrBefore ?? '');
+  const [completedOnOrAfter, setCompletedOnOrAfter] = useState(initialValues?.completedOnOrAfter ?? '');
+  const [completedOnOrBefore, setCompletedOnOrBefore] = useState(initialValues?.completedOnOrBefore ?? '');
+  const [selectedLocations, setSelectedLocations] = useState<DropdownValue[]>(initialValues?.selectedLocations ?? null);
+  const [selectedPrograms, setSelectedPrograms] = useState<DropdownValue[]>(initialValues?.selectedPrograms ?? null);
+  const programOptions = withSelectedItems(programs, selectedPrograms);
+  const locationOptions = withSelectedItems(locations, selectedLocations);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -46,6 +54,7 @@ const SearchByEnrollments: React.FC<SearchByProps> = ({ onSubmit }) => {
 
   const handleResetInputs = () => {
     setSelectedPrograms(null);
+    setSelectedLocations(null);
     setEnrolledOnOrAfter('');
     setEnrolledOnOrBefore('');
     setCompletedOnOrAfter('');
@@ -74,7 +83,8 @@ const SearchByEnrollments: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="programs"
             data-testid="programs"
             onChange={(data) => setSelectedPrograms(data.selectedItems)}
-            items={programs}
+            items={programOptions.items}
+            selectedItems={programOptions.selectedItems}
             label={t('selectPrograms', 'Select programs')}
           />
         </div>
@@ -85,63 +95,46 @@ const SearchByEnrollments: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="locations"
             data-testid="locations"
             onChange={(data) => setSelectedLocations(data.selectedItems)}
-            items={locations}
+            items={locationOptions.items}
+            selectedItems={locationOptions.selectedItems}
             label={t('selectLocations', 'Select locations')}
           />
         </div>
       </Column>
       <div className={styles.column}>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setEnrolledOnOrAfter(dayjs(date[0]).format())}
-            value={enrolledOnOrAfter && dayjs(enrolledOnOrAfter).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput
-              id="enrolledOnOrAfter"
-              labelText={t('enrolledBetween', 'Enrolled between')}
-              placeholder="DD-MM-YYYY"
-              size="md"
-            />
-          </DatePicker>
+          <SearchDatePicker
+            id="enrolledOnOrAfter"
+            labelText={t('enrolledBetween', 'Enrolled between')}
+            value={enrolledOnOrAfter}
+            onChange={setEnrolledOnOrAfter}
+          />
         </Column>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setEnrolledOnOrBefore(dayjs(date[0]).format())}
-            value={enrolledOnOrBefore && dayjs(enrolledOnOrBefore).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput id="enrolledOnOrBefore" labelText={t('and', 'and')} placeholder="DD-MM-YYYY" size="md" />
-          </DatePicker>
+          <SearchDatePicker
+            id="enrolledOnOrBefore"
+            labelText={t('and', 'and')}
+            value={enrolledOnOrBefore}
+            onChange={setEnrolledOnOrBefore}
+          />
         </Column>
       </div>
       <div className={styles.column}>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setCompletedOnOrAfter(dayjs(date[0]).format())}
-            value={completedOnOrAfter && dayjs(completedOnOrAfter).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput
-              id="completedOnOrAfter"
-              labelText={t('completedBetween', 'Completed between')}
-              placeholder="DD-MM-YYYY"
-              size="md"
-            />
-          </DatePicker>
+          <SearchDatePicker
+            id="completedOnOrAfter"
+            labelText={t('completedBetween', 'Completed between')}
+            value={completedOnOrAfter}
+            onChange={setCompletedOnOrAfter}
+          />
         </Column>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setCompletedOnOrBefore(dayjs(date[0]).format())}
-            value={completedOnOrBefore && dayjs(completedOnOrBefore).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput id="completedOnOrBefore" labelText={t('and', 'and')} placeholder="DD-MM-YYYY" size="md" />
-          </DatePicker>
+          <SearchDatePicker
+            id="completedOnOrBefore"
+            labelText={t('and', 'and')}
+            value={completedOnOrBefore}
+            onChange={setCompletedOnOrBefore}
+          />
         </Column>
       </div>
       <SearchButtonSet onHandleReset={handleResetInputs} onHandleSubmit={submit} isLoading={isLoading} />

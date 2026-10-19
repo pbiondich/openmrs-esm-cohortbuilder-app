@@ -1,26 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import dayjs from 'dayjs';
-import { Column, DatePicker, DatePickerInput, Dropdown, MultiSelect } from '@carbon/react';
+import { Column, Dropdown, MultiSelect } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { showSnackbar, useConfig } from '@openmrs/esm-framework';
 import { type ConfigObject } from '../../config-schema';
+import { withSelectedItems } from '../../cohort-builder.utils';
 import type { DropdownValue, DrugOrderDetails, SearchByProps } from '../../types';
 import { getDescription, getQueryDetails } from './search-by-drug-orders.utils';
 import { useCareSettings, useDrugs } from './search-by-drug-orders.resources';
 import SearchButtonSet from '../search-button-set/search-button-set';
+import SearchDatePicker from '../search-date-picker/search-date-picker';
 import styles from './search-by-drug-orders.style.scss';
 
-const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
+interface SearchByDrugOrderProps extends SearchByProps {
+  /** The values to start with, such as a definition link's. */
+  initialValues?: DrugOrderDetails;
+}
+
+const SearchByDrugOrder: React.FC<SearchByDrugOrderProps> = ({ onSubmit, initialValues }) => {
   const { t } = useTranslation();
   const { drugOrderSearchDefinitionKey } = useConfig<ConfigObject>();
   const { drugs, drugsError } = useDrugs();
   const { careSettings, careSettingsError } = useCareSettings();
-  const [activeOnOrAfter, setActiveOnOrAfter] = useState('');
-  const [activeOnOrBefore, setActiveOnOrBefore] = useState('');
-  const [activatedOnOrAfter, setActivatedOnOrAfter] = useState('');
-  const [activatedOnOrBefore, setActivatedOnOrBefore] = useState('');
-  const [selectedDrugs, setSelectedDrugs] = useState<DropdownValue[]>(null);
-  const [selectedCareSetting, setSelectedCareSetting] = useState<DropdownValue>(null);
+  const [activeOnOrAfter, setActiveOnOrAfter] = useState(initialValues?.activeOnOrAfter ?? '');
+  const [activeOnOrBefore, setActiveOnOrBefore] = useState(initialValues?.activeOnOrBefore ?? '');
+  const [activatedOnOrAfter, setActivatedOnOrAfter] = useState(initialValues?.activatedOnOrAfter ?? '');
+  const [activatedOnOrBefore, setActivatedOnOrBefore] = useState(initialValues?.activatedOnOrBefore ?? '');
+  const [selectedDrugs, setSelectedDrugs] = useState<DropdownValue[]>(initialValues?.selectedDrugs ?? null);
+  const [selectedCareSetting, setSelectedCareSetting] = useState<DropdownValue>(
+    initialValues?.selectedCareSetting ?? null,
+  );
+  const drugOptions = withSelectedItems(drugs, selectedDrugs);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -76,7 +85,8 @@ const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="drugs"
             data-testid="drugs"
             onChange={(data) => setSelectedDrugs(data.selectedItems)}
-            items={drugs}
+            items={drugOptions.items}
+            selectedItems={drugOptions.selectedItems}
             label={t('selectDrugs', 'Select drugs')}
           />
         </div>
@@ -87,7 +97,7 @@ const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="careSettings"
             data-testid="careSettings"
             onChange={(data) => setSelectedCareSetting(data.selectedItem)}
-            initialSelectedItem={careSettings[0]}
+            selectedItem={selectedCareSetting}
             items={careSettings}
             label={t('selectCareSettings', 'Select a care setting')}
             titleText=""
@@ -96,59 +106,46 @@ const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
       </div>
       <div className={styles.column}>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setActiveOnOrAfter(dayjs(date[0]).format())}
-            value={activeOnOrAfter && dayjs(activeOnOrAfter).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput
-              id="activeOnOrAfter"
-              labelText={t('using', 'Using between')}
-              placeholder="DD-MM-YYYY"
-              size="md"
-            />
-          </DatePicker>
+          <SearchDatePicker
+            id="activeOnOrAfter"
+            labelText={t('using', 'Using between')}
+            value={activeOnOrAfter}
+            onChange={setActiveOnOrAfter}
+          />
         </Column>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setActiveOnOrBefore(dayjs(date[0]).format())}
-            value={activeOnOrBefore && dayjs(activeOnOrBefore).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput id="activeOnOrBefore" labelText={t('to', 'to')} placeholder="DD-MM-YYYY" size="md" />
-          </DatePicker>
+          <SearchDatePicker
+            id="activeOnOrBefore"
+            labelText={t('to', 'to')}
+            value={activeOnOrBefore}
+            onChange={setActiveOnOrBefore}
+          />
         </Column>
       </div>
       <div className={styles.column}>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setActivatedOnOrAfter(dayjs(date[0]).format())}
-            value={activatedOnOrAfter && dayjs(activatedOnOrAfter).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput
-              id="activatedOnOrAfter"
-              labelText={t('used', 'Used between')}
-              placeholder="DD-MM-YYYY"
-              size="md"
-            />
-          </DatePicker>
+          <SearchDatePicker
+            id="activatedOnOrAfter"
+            labelText={t('used', 'Used between')}
+            value={activatedOnOrAfter}
+            onChange={setActivatedOnOrAfter}
+          />
         </Column>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setActivatedOnOrBefore(dayjs(date[0]).format())}
-            value={activatedOnOrBefore && dayjs(activatedOnOrBefore).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput id="activatedOnOrBefore" labelText={t('and', 'and')} placeholder="DD-MM-YYYY" size="md" />
-          </DatePicker>
+          <SearchDatePicker
+            id="activatedOnOrBefore"
+            labelText={t('and', 'and')}
+            value={activatedOnOrBefore}
+            onChange={setActivatedOnOrBefore}
+          />
         </Column>
       </div>
-      <SearchButtonSet onHandleReset={handleResetInputs} onHandleSubmit={submit} isLoading={isLoading} />
+      <SearchButtonSet
+        onHandleReset={handleResetInputs}
+        onHandleSubmit={submit}
+        isLoading={isLoading}
+        isDisabled={!selectedDrugs?.length}
+      />
     </>
   );
 };

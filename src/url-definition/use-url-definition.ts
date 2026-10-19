@@ -22,6 +22,8 @@ interface UrlDefinitionHandlers {
   showCohort: (cohortUuid: string) => Promise<boolean>;
   showQuery: (queryUuid: string) => Promise<boolean>;
   onHistoryChange: () => void;
+  /** Called with a definition link's definition before it runs, to fill in the search tabs. */
+  onDefinition: (definition: CohortDefinition, names: Map<string, string>) => void;
 }
 
 /**
@@ -34,6 +36,7 @@ export function useUrlDefinition({
   showCohort,
   showQuery,
   onHistoryChange,
+  onDefinition,
 }: UrlDefinitionHandlers): string | null {
   const { t } = useTranslation();
   const { drugOrderSearchDefinitionKey } = useConfig<ConfigObject>();
@@ -43,7 +46,7 @@ export function useUrlDefinition({
   const queuedParams = useRef<URLSearchParams | null>(null);
 
   useEffect(() => {
-    const handlers = { runSearch, showCohort, showQuery, onHistoryChange };
+    const handlers = { runSearch, showCohort, showQuery, onHistoryChange, onDefinition };
 
     const runLink = async (params: URLSearchParams) => {
       isRunning.current = true;
@@ -81,7 +84,7 @@ export function useUrlDefinition({
     // The page stays mounted when another link to it is opened; single-spa's navigateToUrl fires popstate.
     window.addEventListener('popstate', openLinkInUrl);
     return () => window.removeEventListener('popstate', openLinkInUrl);
-  }, [runSearch, showCohort, showQuery, onHistoryChange, drugOrderSearchDefinitionKey]);
+  }, [runSearch, showCohort, showQuery, onHistoryChange, onDefinition, drugOrderSearchDefinitionKey]);
 
   if (!error) {
     return null;
@@ -135,16 +138,18 @@ async function runRequest(request: UrlRequest, handlers: UrlDefinitionHandlers, 
 /**
  * Runs each criterion as its own search, then a composition ANDing them. If anything fails, the
  * history entries this link added are removed again, so a link never leaves half of its searches behind.
+ * The tabs are filled in first, so a link whose search fails can still be fixed and run again.
  * Every entry is described in the builder's own words for its criteria; the link's label is never
  * shown, so a link can't call one population another.
  */
 async function runDefinition(
   definition: CohortDefinition,
-  { runSearch, onHistoryChange }: UrlDefinitionHandlers,
+  { runSearch, onHistoryChange, onDefinition }: UrlDefinitionHandlers,
   drugOrderSearchDefinitionKey: string,
 ) {
   const { criteria } = definition;
   const names = await fetchDisplayNames(definition);
+  onDefinition(definition, names);
   // 1-based history positions of the entries this link added. Searches run meanwhile from the tabs are not included.
   const addedEntries: number[] = [];
 

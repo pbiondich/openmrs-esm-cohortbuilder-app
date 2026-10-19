@@ -9,7 +9,7 @@ import type { DropdownValue, Response } from '../../types';
 export function useDrugs() {
   const { data, error } = useSWRImmutable<{
     data: { results: Response[] };
-  }>(`${restBaseUrl}/drug`, openmrsFetch);
+  }>(`${restBaseUrl}/drug?v=custom:(uuid,display)`, openmrsFetch);
 
   const results = useMemo(() => {
     const drugs: DropdownValue[] = [];
@@ -36,7 +36,7 @@ export function useDrugs() {
 export function useCareSettings() {
   const { data, error } = useSWRImmutable<{
     data: { results: Response[] };
-  }>(`${restBaseUrl}/caresetting`, openmrsFetch);
+  }>(`${restBaseUrl}/caresetting?v=custom:(uuid,display)`, openmrsFetch);
 
   const results = useMemo(() => {
     const careSettings: DropdownValue[] = [];

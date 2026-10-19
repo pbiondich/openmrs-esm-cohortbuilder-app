@@ -8,7 +8,7 @@ import { type DropdownValue, type Response } from '../../types';
 export function usePersonAttributes() {
   const { data, error } = useSWRImmutable<{
     data: { results: Response[] };
-  }>(`${restBaseUrl}/personattributetype`, openmrsFetch);
+  }>(`${restBaseUrl}/personattributetype?v=custom:(uuid,display)`, openmrsFetch);
 
   const personAttributes: DropdownValue[] = [];
   data?.data.results.map((personAttribute: Response, index: number) => {

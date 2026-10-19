@@ -1,21 +1,26 @@
 import React, { useState } from 'react';
 import classNames from 'classnames';
-import dayjs from 'dayjs';
-import { Column, ContentSwitcher, DatePicker, DatePickerInput, NumberInput, Switch } from '@carbon/react';
+import { Column, ContentSwitcher, NumberInput, Switch } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { type SearchByProps } from '../../types';
-import { getDescription, getQueryDetails } from './search-by-demographics.utils';
+import { type Demographics, getDescription, getQueryDetails } from './search-by-demographics.utils';
 import SearchButtonSet from '../search-button-set/search-button-set';
+import SearchDatePicker from '../search-date-picker/search-date-picker';
 import styles from './search-by-demographics.style.scss';
 
-const SearchByDemographics: React.FC<SearchByProps> = ({ onSubmit }) => {
+interface SearchByDemographicsProps extends SearchByProps {
+  /** The values to start with, such as a definition link's. */
+  initialValues?: Demographics;
+}
+
+const SearchByDemographics: React.FC<SearchByDemographicsProps> = ({ onSubmit, initialValues }) => {
   const { t } = useTranslation();
-  const [livingStatus, setLivingStatus] = useState('alive');
-  const [gender, setGender] = useState('all');
-  const [birthDayStartDate, setBirthDayStartDate] = useState('');
-  const [birthDayEndDate, setBirthDayEndDate] = useState('');
-  const [minAge, setMinAge] = useState(0);
-  const [maxAge, setMaxAge] = useState(0);
+  const [livingStatus, setLivingStatus] = useState(initialValues?.livingStatus ?? 'alive');
+  const [gender, setGender] = useState(initialValues?.gender ?? 'all');
+  const [birthDayStartDate, setBirthDayStartDate] = useState(initialValues?.birthDayStartDate ?? '');
+  const [birthDayEndDate, setBirthDayEndDate] = useState(initialValues?.birthDayEndDate ?? '');
+  const [minAge, setMinAge] = useState(initialValues?.minAge ?? 0);
+  const [maxAge, setMaxAge] = useState(initialValues?.maxAge ?? 0);
   const [isLoading, setIsLoading] = useState(false);
 
   const genders = [
@@ -50,6 +55,8 @@ const SearchByDemographics: React.FC<SearchByProps> = ({ onSubmit }) => {
   ];
 
   const reset = () => {
+    setGender('all');
+    setLivingStatus('alive');
     setMaxAge(0);
     setMinAge(0);
     setBirthDayEndDate('');
@@ -77,7 +84,7 @@ const SearchByDemographics: React.FC<SearchByProps> = ({ onSubmit }) => {
         <div className={styles.genderContainer}>
           <div className={styles.switch}>
             <ContentSwitcher
-              selectedIndex={genders[0].id}
+              selectedIndex={genders.findIndex(({ value }) => value === gender)}
               className={styles.contentSwitcher}
               size="lg"
               onChange={({ index }) => setGender(genders[index].value)}
@@ -89,7 +96,7 @@ const SearchByDemographics: React.FC<SearchByProps> = ({ onSubmit }) => {
           </div>
           <div className={styles.switch}>
             <ContentSwitcher
-              selectedIndex={livingStatuses[0].id}
+              selectedIndex={livingStatuses.findIndex(({ value }) => value === livingStatus)}
               className={styles.contentSwitcher}
               size="lg"
               onChange={({ index }) => setLivingStatus(livingStatuses[index].value)}
@@ -132,29 +139,20 @@ const SearchByDemographics: React.FC<SearchByProps> = ({ onSubmit }) => {
       </div>
       <div className={styles.column}>
         <Column>
-          <DatePicker
-            datePickerType="single"
-            allowInput={false}
-            onChange={(date) => setBirthDayStartDate(dayjs(date[0]).format())}
-            value={birthDayStartDate && dayjs(birthDayStartDate).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput
-              id="startDate"
-              labelText={t('birthDate', 'Birth date between')}
-              placeholder="DD-MM-YYYY"
-              size="md"
-            />
-          </DatePicker>
+          <SearchDatePicker
+            id="startDate"
+            labelText={t('birthDate', 'Birth date between')}
+            value={birthDayStartDate}
+            onChange={setBirthDayStartDate}
+          />
         </Column>
         <Column>
-          <DatePicker
-            allowInput={false}
-            datePickerType="single"
-            onChange={(date) => setBirthDayEndDate(dayjs(date[0]).format())}
-            value={birthDayEndDate && dayjs(birthDayEndDate).format('DD-MM-YYYY')}
-          >
-            <DatePickerInput id="endDate" labelText={t('and', 'and')} placeholder="DD-MM-YYYY" size="md" />
-          </DatePicker>
+          <SearchDatePicker
+            id="endDate"
+            labelText={t('and', 'and')}
+            value={birthDayEndDate}
+            onChange={setBirthDayEndDate}
+          />
         </Column>
       </div>
       <SearchButtonSet isLoading={isLoading} onHandleSubmit={submit} onHandleReset={reset} />

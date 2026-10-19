@@ -1,7 +1,7 @@
 import { composeJson } from '../../cohort-builder.utils';
 import { type DropdownValue } from '../../types';
 
-interface EnrollmentsSearchParams {
+export interface EnrollmentsSearchParams {
   enrolledOnOrAfter: string;
   enrolledOnOrBefore: string;
   completedOnOrAfter: string;

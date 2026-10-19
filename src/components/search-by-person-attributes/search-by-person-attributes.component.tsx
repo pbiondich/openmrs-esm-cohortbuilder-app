@@ -12,7 +12,7 @@ import { getQueryDetails, getSearchByAttributesDescription } from './search-by-p
 const SearchByPersonAttributes: React.FC<SearchByProps> = ({ onSubmit }) => {
   const { t } = useTranslation();
   const { personAttributes, personAttributesError } = usePersonAttributes();
-  const [selectedAttributeValues, setSelectedAttributeValues] = useState([]);
+  const [attributeValuesText, setAttributeValuesText] = useState('');
   const [selectedAttributeId, setSelectedAttributeId] = useState<string>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -27,11 +27,12 @@ const SearchByPersonAttributes: React.FC<SearchByProps> = ({ onSubmit }) => {
 
   const handleResetInputs = () => {
     setSelectedAttributeId(null);
-    setSelectedAttributeValues([]);
+    setAttributeValuesText('');
   };
 
   const submit = async () => {
     setIsLoading(true);
+    const selectedAttributeValues = attributeValuesText ? attributeValuesText.trim().split(',') : [];
     const selectedPersonAttribute = personAttributes?.find(
       (personAttribute) => personAttribute.value == selectedAttributeId,
     );
@@ -50,6 +51,7 @@ const SearchByPersonAttributes: React.FC<SearchByProps> = ({ onSubmit }) => {
             id="personAttributes"
             data-testid="personAttributes"
             onChange={(data) => setSelectedAttributeId(data.selectedItem.value)}
+            selectedItem={personAttributes?.find(({ value }) => value === selectedAttributeId) ?? null}
             items={personAttributes}
             label={t('selectAttribute', 'Select a person attribute')}
             titleText=""
@@ -63,7 +65,8 @@ const SearchByPersonAttributes: React.FC<SearchByProps> = ({ onSubmit }) => {
             data-testid={'selectedAttributeValues'}
             disabled={!selectedAttributeId}
             labelText={t('selectedAttributeValues', 'Enter Comma Delimited Values')}
-            onChange={(e) => setSelectedAttributeValues(e.target.value.trim().split(','))}
+            onChange={(e) => setAttributeValuesText(e.target.value)}
+            value={attributeValuesText}
           />
         </Column>
       </div>

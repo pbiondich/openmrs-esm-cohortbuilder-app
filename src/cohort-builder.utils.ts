@@ -1,4 +1,4 @@
-import type { Column, Patient, Query } from './types';
+import type { Column, DropdownValue, Patient, Query } from './types';
 
 export const composeJson = (searchParameters) => {
   const query: Query = {
@@ -117,6 +117,18 @@ export const addToHistory = (description: string, patients: Patient[], parameter
   }
   window.sessionStorage.setItem('openmrsHistory', JSON.stringify(newHistory));
 };
+
+/**
+ * A MultiSelect's items and its selected ones among them, matched by value. A selected value the list
+ * doesn't have, or doesn't have yet, is added as it is, so a pre-filled selection always shows.
+ */
+export const withSelectedItems = (items: DropdownValue[], selected: DropdownValue[] | null) => {
+  const selectedItems = (selected ?? []).map((item) => items.find(({ value }) => value === item.value) ?? item);
+  return { items: [...items, ...selectedItems.filter((item) => !items.includes(item))], selectedItems };
+};
+
+/** A patient's name from the parts they have, so a missing one doesn't show as "null". */
+export const getPatientName = (...parts: Array<string | null | undefined>) => parts.filter(Boolean).join(' ');
 
 export const formatDate = (dateString: string) => {
   const date = new Date(dateString);

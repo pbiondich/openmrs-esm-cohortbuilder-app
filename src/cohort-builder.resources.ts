@@ -1,6 +1,7 @@
 import useSWRImmutable from 'swr/immutable';
 import { openmrsFetch, restBaseUrl, type FetchResponse } from '@openmrs/esm-framework';
 import type { Patient, SearchParams, DropdownValue, Response } from './types';
+import { getPatientName } from './cohort-builder.utils';
 import { isUuid } from './url-definition/url-definition';
 
 /**
@@ -29,7 +30,7 @@ export const search = async (searchParams: SearchParams) => {
 export const useLocations = () => {
   const { data, error } = useSWRImmutable<{
     data: { results: Response[] };
-  }>(`${restBaseUrl}/location`, openmrsFetch);
+  }>(`${restBaseUrl}/location?v=custom:(uuid,display)`, openmrsFetch);
 
   const locations: DropdownValue[] = [];
   data?.data.results.map((location: Response, index: number) => {
@@ -54,7 +55,7 @@ export const getDataSet = async (queryID: string) => {
 
   const dataset = results.data.rows.map((patient: Patient) => {
     patient.id = patient.patientId.toString();
-    patient.name = `${patient.firstname} ${patient.lastname}`;
+    patient.name = getPatientName(patient.firstname, patient.lastname);
 
     return patient;
   });
@@ -131,9 +132,27 @@ async function getAllMemberships(cohortId: string) {
   return [...memberships.values()];
 }
 
-/** Same rule as core's CohortMembership.isActive: not voided, started, and not yet ended. */
+/**
+ * Same rule as core's CohortMembership.isActive: not voided, started, and not yet ended. Only a missing
+ * bound is open; one that is not a date leaves the membership out.
+ */
 function isActiveMembership({ voided, startDate, endDate }: CohortMembership, now: Date) {
-  return !voided && (!startDate || new Date(startDate) <= now) && (!endDate || new Date(endDate) >= now);
+  return (
+    !voided &&
+    (startDate == null || parseTimestamp(startDate) <= now) &&
+    (endDate == null || parseTimestamp(endDate) >= now)
+  );
+}
+
+/**
+ * OpenMRS writes offsets as +0000, which Safari can't parse; the standard +00:00 is the same instant.
+ * Anything but a string is an Invalid Date, which no comparison passes.
+ */
+function parseTimestamp(timestamp: unknown) {
+  if (typeof timestamp !== 'string') {
+    return new Date(NaN);
+  }
+  return new Date(timestamp.trim().replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
 }
 
 /** Loads one member for the results table, or null if it cannot be shown. */
@@ -151,7 +170,7 @@ async function getCohortMember(patientUuid: string): Promise<Patient | null> {
     return {
       id: patientId.toString(),
       patientId,
-      name: `${givenName} ${familyName}`,
+      name: getPatientName(givenName, familyName),
       firstname: givenName,
       lastname: familyName,
       age: person.age,

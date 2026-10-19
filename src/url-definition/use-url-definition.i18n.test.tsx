@@ -22,6 +22,7 @@ const handlers = {
   showCohort: vi.fn(async () => true),
   showQuery: vi.fn(async () => true),
   onHistoryChange: vi.fn(),
+  onDefinition: vi.fn(),
 };
 
 function LinkError() {
