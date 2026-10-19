@@ -49,9 +49,14 @@ describe('looking up a test by name', () => {
     getSessionStore().setState({ loaded: false, session: null });
   });
 
-  it("keeps numeric concepts, with their names in the user's language and English, and their units", () => {
+  it('keeps numeric concepts, with every name and synonym they have in any language, and their units', () => {
     expect(toTests(answer, 'fr_FR')).toEqual([
-      { uuid: viralLoad, label: 'HIV viral load', aliases: ['Viral load', 'Charge virale'], units: 'copies/mL' },
+      {
+        uuid: viralLoad,
+        label: 'HIV viral load',
+        aliases: ['Viral load', 'Charge virale', 'Wingi wa virusi'],
+        units: 'copies/mL',
+      },
       { uuid: hepB, label: 'Hepatitis B viral load', aliases: [], units: 'IU/mL' },
     ]);
     expect(toTests(null, 'en')).toEqual([]);
