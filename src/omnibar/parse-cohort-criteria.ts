@@ -12,6 +12,11 @@ import {
   MAX_CRITERIA,
   MAX_DRUGS,
   MAX_LABEL_LENGTH,
+  MAX_TEST_VALUE,
+  MAX_WITHIN_DAYS,
+  MAX_WITHIN_MONTHS,
+  type TestOperator,
+  type TestResult,
 } from '../url-definition/url-definition';
 import {
   type CompiledPhrases,
@@ -37,8 +42,21 @@ export interface CohortCriteriaConfig {
   drugGroups: Array<CohortDrugGroup>;
   /** Encounter types read as "<alias> encounter". None configured, none understood. */
   encounterTypes?: Array<CohortEncounterType>;
+  /**
+   * Numeric tests, read as "<name> <comparison> <value>", in the concept's units. In the omnibar they
+   * come from the server's concept names for the words the parser couldn't otherwise read.
+   */
+  tests?: Array<CohortTest>;
   /** The phrase table to read with. The shipped English one when not given. */
   phrases?: CompiledPhrases;
+}
+
+/** A numeric concept the parser can read by name, with the units its values are in. */
+export interface CohortTest {
+  uuid: string;
+  label: string;
+  aliases: Array<string>;
+  units: string;
 }
 
 const isObject = (value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -64,7 +82,14 @@ type Clause =
   | { kind: 'age'; minAge?: number; maxAge?: number; gender?: Gender; group?: boolean }
   | { kind: 'program'; program: CohortProgram }
   | { kind: 'drugGroup'; group: CohortDrugGroup }
-  | { kind: 'encounter'; encounterType: CohortEncounterType };
+  | { kind: 'encounter'; encounterType: CohortEncounterType }
+  | ({ kind: 'test'; test: CohortTest; operator: TestOperator; value: number; which?: TestResult } & TestWindow);
+
+interface TestWindow {
+  withinLastMonths?: number;
+  withinLastDays?: number;
+  onOrAfter?: string;
+}
 
 interface Match {
   next: number;
@@ -352,6 +377,144 @@ function matchEncounter(
   return noun !== null ? { next: noun, clause: { kind: 'encounter', encounterType: hit.item } } : null;
 }
 
+const testComparisons = [
+  ['testUnder', 'lt'],
+  ['testAtMost', 'le'],
+  ['testOver', 'gt'],
+  ['testAtLeast', 'ge'],
+  ['testEquals', 'eq'],
+] as const;
+
+const testResults = [
+  ['resultLatest', 'latest'],
+  ['resultFirst', 'first'],
+  ['resultLowest', 'lowest'],
+  ['resultHighest', 'highest'],
+  ['resultAny', 'any'],
+  ['resultAverage', 'average'],
+] as const;
+
+/** The phrase from `lists` that matches the most words at `start`, with what it stands for. */
+function longestOf<T>(
+  tokens: Array<string>,
+  start: number,
+  lists: ReadonlyArray<readonly [keyof CompiledPhrases, T]>,
+  P: CompiledPhrases,
+): { next: number; value: T } | null {
+  let best: { next: number; value: T } | null = null;
+  for (const [list, value] of lists) {
+    const next = matchPhrase(tokens, start, P[list] as Array<Array<string>>);
+    if (next !== null && (!best || next > best.next)) best = { next, value };
+  }
+  return best;
+}
+
+/** A test value: digits, perhaps with decimals ("1000", "49.5"), or a small number in words. */
+function readValue(tokens: Array<string>, start: number, P: CompiledPhrases): { value: number; next: number } | null {
+  const token = tokens[start];
+  if (/^\d{1,13}(\.\d{1,6})?$/.test(token ?? '')) {
+    const value = Number(token);
+    return value <= MAX_TEST_VALUE ? { value, next: start + 1 } : null;
+  }
+  return readNumber(tokens, start, P);
+}
+
+/** Units compared as written, but with "per" read as "/" and µ as u: "cells/µL" is "cells per uL". */
+const unitWords = (words: Array<string>) => words.map((word) => (word === 'per' ? '/' : word.replace(/[µμ]/g, 'u')));
+
+/** The concept's units at `start`, typed as the concept writes them, or null. */
+function readUnits(tokens: Array<string>, start: number, units: string): number | null {
+  const wanted = unitWords(tokenize(units) ?? []);
+  if (!wanted.length) return null;
+  const typed = unitWords(tokens.slice(start, start + wanted.length));
+  return wanted.every((word, offset) => typed[offset] === word) ? start + wanted.length : null;
+}
+
+const isRealDate = (year: number, month: number, day: number) => {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
+
+/** "in the last 6 months", "past 2 weeks", "since 2025", "since 2025-03-01". */
+function readWindow(
+  tokens: Array<string>,
+  start: number,
+  P: CompiledPhrases,
+): { next: number; window: TestWindow } | null {
+  const last = matchPhrase(tokens, start, P.windowStart);
+  if (last !== null) {
+    const count = readNumber(tokens, last, P);
+    if (!count || count.value < 1) return null;
+    const unit = longestOf(
+      tokens,
+      count.next,
+      [
+        ['windowDays', 1],
+        ['windowWeeks', 7],
+        ['windowMonths', -1],
+        ['windowYears', -12],
+      ] as const,
+      P,
+    );
+    if (!unit) return null;
+    const window: TestWindow =
+      unit.value > 0 ? { withinLastDays: count.value * unit.value } : { withinLastMonths: count.value * -unit.value };
+    if ((window.withinLastDays ?? 0) > MAX_WITHIN_DAYS || (window.withinLastMonths ?? 0) > MAX_WITHIN_MONTHS)
+      return null;
+    return { next: unit.next, window };
+  }
+  const since = matchPhrase(tokens, start, P.since);
+  const year = since !== null ? tokens[since] : undefined;
+  if (!/^(19|20)\d\d$/.test(year ?? '')) return null;
+  // "since 2025-03-01": the tokenizer keeps the dashes as words of their own.
+  const [dash1, month, dash2, day] = tokens.slice(since + 1, since + 5);
+  if (dash1 === '-' && /^\d{2}$/.test(month ?? '') && dash2 === '-' && /^\d{2}$/.test(day ?? '')) {
+    if (!isRealDate(Number(year), Number(month), Number(day))) return null;
+    return { next: since + 5, window: { onOrAfter: `${year}-${month}-${day}` } };
+  }
+  return { next: since + 1, window: { onOrAfter: `${year}-01-01` } };
+}
+
+/**
+ * "most recent viral load > 1000", "lowest CD4 count under 200 cells/µL in the last 6 months",
+ * "viral load ever above 1000". The result words come before the name, except "ever" and its kind
+ * just after it; the value is in the concept's units, and a unit typed after it must be those.
+ */
+function matchTest(tokens: Array<string>, start: number, tests: Array<CohortTest>, P: CompiledPhrases): Match | null {
+  if (!tests.length) return null;
+  let i = start;
+  const before = longestOf(tokens, i, testResults, P);
+  if (before) i = before.next;
+  const hit = longestAlias(tokens, i, tests, P);
+  if (!hit) return null;
+  i = hit.next;
+  let which: TestResult | undefined = before?.value;
+  if (!which) {
+    const ever = matchPhrase(tokens, i, P.resultAny);
+    if (ever !== null) {
+      which = 'any';
+      i = ever;
+    }
+  }
+  const comparison = longestOf(tokens, i, testComparisons, P);
+  if (!comparison) return null;
+  const value = readValue(tokens, comparison.next, P);
+  if (!value) return null;
+  i = readUnits(tokens, value.next, hit.item.units) ?? value.next;
+  const window = readWindow(tokens, i, P);
+  return {
+    next: window?.next ?? i,
+    clause: {
+      kind: 'test',
+      test: hit.item,
+      operator: comparison.value,
+      value: value.value,
+      ...(which && which !== 'latest' && { which }),
+      ...window?.window,
+    },
+  };
+}
+
 function describeAge(minAge?: number, maxAge?: number): string | null {
   if (minAge != null && maxAge != null) return minAge === maxAge ? `aged ${minAge}` : `aged ${minAge}–${maxAge}`;
   if (minAge != null) return `aged ${minAge}+`;
@@ -364,6 +527,87 @@ const isAge = (value: number | undefined) =>
 
 const joiners = new Set(['and', 'with']);
 const isPopulation = (clause: Clause) => clause.kind === 'gender' || (clause.kind === 'age' && clause.group);
+const operatorSigns: Record<TestOperator, string> = { lt: '<', le: '<=', eq: '=', ge: '>=', gt: '>' };
+
+/**
+ * The question's clauses in order, or where reading stopped: the first word that is neither part of
+ * a criterion nor a stopword. Each clause says whether "and", "with" or a comma came before it, since
+ * the last one; `afterComma` holds the token indices a comma stood before.
+ */
+function readClauses(
+  tokens: Array<string>,
+  config: CohortCriteriaConfig,
+  P: CompiledPhrases,
+  afterComma: Set<number> = new Set(),
+): { matches: Array<Match & { joined: boolean }> } | { unreadAt: number } {
+  const configuredDrugGroups = config.drugCriteriaEnabled ? config.drugGroups ?? [] : [];
+  const matches: Array<Match & { joined: boolean }> = [];
+  let joined = false;
+  let i = 0;
+  while (i < tokens.length) {
+    if (afterComma.has(i)) joined = true;
+    // Criteria before stopwords, so "at least" is read before "at" could be skipped, and the reading
+    // that takes the most words, so "women of reproductive age" is one age group, not "women".
+    const match = [
+      matchGender(tokens, i, P),
+      matchAge(tokens, i, P),
+      matchProgram(tokens, i, config.programs ?? [], P),
+      matchDrugGroup(tokens, i, configuredDrugGroups, P),
+      matchEncounter(tokens, i, config.encounterTypes ?? [], P),
+      matchTest(tokens, i, config.tests ?? [], P),
+    ].reduce<Match | null>(
+      (longest, reading) => (reading && (!longest || reading.next > longest.next) ? reading : longest),
+      null,
+    );
+    if (match) {
+      matches.push({ ...match, joined });
+      joined = false;
+      i = match.next;
+      continue;
+    }
+    const stopword = matchPhrase(tokens, i, P.stopwords);
+    if (stopword === null) return { unreadAt: i };
+    if (tokens.slice(i, stopword).some((token) => joiners.has(token))) joined = true;
+    i = stopword;
+  }
+  return { matches };
+}
+
+/**
+ * The words that stopped the parser, as typed, when they could be a test's name: from the first word
+ * it couldn't read up to the comparison or window that follows ("viral load" in "patients with viral
+ * load over 1000"), at most six words with a letter among them. The omnibar looks these up among the
+ * server's concept names. Null when the text reads, or the words can't be a name.
+ */
+export function unreadWords(text: string, config: CohortCriteriaConfig): string | null {
+  const P = config.phrases ?? compilePhrases();
+  const tokens = tokenize(text);
+  if (!tokens?.length) return null;
+  const read = readClauses(tokens, config, P);
+  if (!('unreadAt' in read)) return null;
+  const start = read.unreadAt;
+  let end = start;
+  while (
+    end < tokens.length &&
+    !longestOf(tokens, end, testComparisons, P) &&
+    matchPhrase(tokens, end, P.windowStart) === null &&
+    matchPhrase(tokens, end, P.since) === null &&
+    !P.never.has(tokens[end])
+  ) {
+    end++;
+  }
+  const words = tokens.slice(start, end);
+  if (!words.length || words.length > 6 || !words.some((word) => /\p{L}/u.test(word))) return null;
+  // Put back what the tokenizer split: "cd4", not "cd 4", when that is how it was typed.
+  const typed = text.normalize('NFKC').toLowerCase();
+  return words.reduce((joined, word) => {
+    if (!joined) return word;
+    const last = joined.split(' ').at(-1);
+    return typed.includes(`${last}${word}`) && !typed.includes(`${last} ${word}`)
+      ? `${joined}${word}`
+      : `${joined} ${word}`;
+  }, '');
+}
 
 export function parseCohortCriteria(text: string, config: CohortCriteriaConfig): CohortDefinition | null {
   const P = config.phrases ?? compilePhrases();
@@ -390,8 +634,7 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   const programs: Array<CohortProgram> = [];
   const drugGroups: Array<CohortDrugGroup> = [];
   const encounterTypes: Array<CohortEncounterType> = [];
-
-  const configuredDrugGroups = config.drugCriteriaEnabled ? config.drugGroups ?? [] : [];
+  const tests: Array<Extract<Clause, { kind: 'test' }>> = [];
 
   // Whether a gender or a named age group was read, and "and", "with" or a comma came after one, at any
   // distance or right after it.
@@ -399,33 +642,15 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   let joined = false;
   let joinedToPopulation = false;
   let lastWasPopulation = false;
-  const join = () => {
-    joined ||= population;
-    joinedToPopulation ||= lastWasPopulation;
-  };
-  let i = 0;
-  while (i < tokens.length) {
-    if (afterComma.has(i)) join();
-    // Criteria before stopwords, so "at least" is read before "at" could be skipped, and the reading
-    // that takes the most words, so "women of reproductive age" is one age group, not "women".
-    const match = [
-      matchGender(tokens, i, P),
-      matchAge(tokens, i, P),
-      matchProgram(tokens, i, config.programs ?? [], P),
-      matchDrugGroup(tokens, i, configuredDrugGroups, P),
-      matchEncounter(tokens, i, config.encounterTypes ?? [], P),
-    ].reduce<Match | null>(
-      (longest, reading) => (reading && (!longest || reading.next > longest.next) ? reading : longest),
-      null,
-    );
-    if (!match) {
-      const stopword = matchPhrase(tokens, i, P.stopwords);
-      if (stopword === null) return null;
-      if (tokens.slice(i, stopword).some((token) => joiners.has(token))) join();
-      i = stopword;
-      continue;
+  const read = readClauses(tokens, config, P, afterComma);
+  if ('unreadAt' in read) {
+    return null;
+  }
+  for (const match of read.matches) {
+    if (match.joined) {
+      joined ||= population;
+      joinedToPopulation ||= lastWasPopulation;
     }
-
     const { clause } = match;
     // "women and children", or "women under 30 and children", asks about two populations, so it never
     // counts the girls they share. "women and under 5" may too, so any age right after one is refused.
@@ -453,8 +678,9 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
       if (!drugGroups.includes(clause.group)) drugGroups.push(clause.group);
     } else if (clause.kind === 'encounter' && !encounterTypes.includes(clause.encounterType)) {
       encounterTypes.push(clause.encounterType);
+    } else if (clause.kind === 'test') {
+      tests.push(clause);
     }
-    i = match.next;
   }
 
   if (!isAge(minAge) || !isAge(maxAge)) {
@@ -479,7 +705,7 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   if (minAge === 0 && maxAge == null) {
     minAge = undefined;
   }
-  if (![...programs, ...encounterTypes].every((item) => isUuid(item.uuid))) {
+  if (![...programs, ...encounterTypes, ...tests.map(({ test }) => test)].every((item) => isUuid(item.uuid))) {
     return null;
   }
   // A group without Drug uuids (or with too many) can't become a drug order search, so nothing is offered.
@@ -509,6 +735,18 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   for (const encounterType of encounterTypes) {
     criteria.push({ type: 'encounter', encounterTypes: [encounterType.uuid] });
   }
+  for (const { test, operator, value, which, withinLastMonths, withinLastDays, onOrAfter } of tests) {
+    criteria.push({
+      type: 'numericObs',
+      concept: test.uuid,
+      operator,
+      value,
+      ...(which && { which }),
+      ...(withinLastMonths && { withinLastMonths }),
+      ...(withinLastDays && { withinLastDays }),
+      ...(onOrAfter && { onOrAfter }),
+    });
+  }
   if (!criteria.length || criteria.length > MAX_CRITERIA) {
     return null;
   }
@@ -519,6 +757,9 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
     ...programs.map((program) => `in ${program.label}`),
     ...drugGroups.map((group) => `on ${group.label}`),
     ...encounterTypes.map((encounterType) => `with ${encounterType.label} encounters`),
+    ...tests.map(({ test, operator, value, which }) =>
+      [`with ${which ?? 'latest'} ${test.label}`, operatorSigns[operator], value, test.units].filter(Boolean).join(' '),
+    ),
   ]
     .filter(Boolean)
     .join(' ');

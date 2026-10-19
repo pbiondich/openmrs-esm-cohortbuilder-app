@@ -1,5 +1,5 @@
 {
-  "$comment": "The words the omnibar's cohort parser understands in English. Data, not code: add phrases here, or per site with the omnibar.phrases config. Comparators use the FHIR search prefixes (lt, le, gt, ge, eq) as their ids: 'under' is lt, 'atMost' le, 'over' gt, 'atLeast' ge, 'aged' eq. Age groups give their source. A word in 'never' can't be a stopword, so text with a negation or an alternative is never read as something else. 'from age' is in both rangeFrom and atLeast on purpose: the reading that covers the most words decides, so 'from age 15 to 49' is a range and 'from age 15' is 15 and over. A site may add phrases in another script; they match only text in that script. The tokenizer drops apostrophes, so 'never' lists contractions without them ('isnt', 'dont').",
+  "$comment": "The words the omnibar's cohort parser understands in English. Data, not code: add phrases here, or per site with the omnibar.phrases config. Comparators use the FHIR search prefixes (lt, le, gt, ge, eq) as their ids: 'under' is lt, 'atMost' le, 'over' gt, 'atLeast' ge, 'aged' eq. Age groups give their source. A word in 'never' can't be a stopword, so text with a negation or an alternative is never read as something else. 'from age' is in both rangeFrom and atLeast on purpose: the reading that covers the most words decides, so 'from age 15 to 49' is a range and 'from age 15' is 15 and over. A site may add phrases in another script; they match only text in that script. The tokenizer drops apostrophes, so 'never' lists contractions without them ('isnt', 'dont'). Test results: testUnder (lt), testAtMost (le), testOver (gt), testAtLeast (ge) and testEquals (eq) come before the value; the result* lists choose which result is compared, the most recent by default; windowStart with a number and a unit, or since with a year or a date, limits the results to a window.",
   "stopwords": [
     "a",
     "all",
@@ -480,5 +480,123 @@
   "encounterNouns": [
     "encounter",
     "encounters"
+  ],
+  "testUnder": [
+    "<",
+    "below",
+    "fewer than",
+    "less than",
+    "lower than",
+    "under"
+  ],
+  "testAtMost": [
+    "<=",
+    "=<",
+    "at most",
+    "max",
+    "maximum",
+    "no higher than",
+    "no more than",
+    "not above",
+    "not more than",
+    "not over",
+    "up to"
+  ],
+  "testOver": [
+    ">",
+    "above",
+    "exceeding",
+    "greater than",
+    "higher than",
+    "more than",
+    "over"
+  ],
+  "testAtLeast": [
+    ">=",
+    "=>",
+    "at least",
+    "min",
+    "minimum",
+    "no less than",
+    "no lower than",
+    "not below",
+    "not less than",
+    "not under"
+  ],
+  "testEquals": [
+    "=",
+    "equal to",
+    "equals",
+    "exactly",
+    "of exactly"
+  ],
+  "resultLatest": [
+    "current",
+    "last",
+    "latest",
+    "most recent",
+    "recent"
+  ],
+  "resultFirst": [
+    "baseline",
+    "earliest",
+    "first",
+    "initial"
+  ],
+  "resultLowest": [
+    "lowest",
+    "nadir"
+  ],
+  "resultHighest": [
+    "highest",
+    "peak"
+  ],
+  "resultAny": [
+    "any",
+    "at any time",
+    "ever"
+  ],
+  "resultAverage": [
+    "average",
+    "mean"
+  ],
+  "windowStart": [
+    "during the last",
+    "during the past",
+    "in the last",
+    "in the past",
+    "last",
+    "over the last",
+    "over the past",
+    "past",
+    "within the last",
+    "within the past"
+  ],
+  "windowDays": [
+    "day",
+    "days"
+  ],
+  "windowWeeks": [
+    "week",
+    "weeks",
+    "wk",
+    "wks"
+  ],
+  "windowMonths": [
+    "month",
+    "months",
+    "mo",
+    "mos"
+  ],
+  "windowYears": [
+    "year",
+    "years",
+    "yr",
+    "yrs"
+  ],
+  "since": [
+    "since",
+    "from",
+    "on or after"
   ]
 }
