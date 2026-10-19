@@ -113,6 +113,15 @@ export const configSchema = {
         "program's concept in the user's language and English, besides those in programs and encounterTypes. " +
         'Asked for once per user when the row is first allowed to answer, never per keystroke. Off, only config is known.',
     },
+    testResults: {
+      _type: Type.Boolean,
+      _default: true,
+      _description:
+        'Let the cohort row count by numeric test results, as in "patients with a viral load over 1000". The ' +
+        "test's name is looked up among the server's concept names, and its value is read in the concept's units. " +
+        'Only the words the row could not otherwise read are sent, and only when a comparison follows them or they ' +
+        'are being typed after other words. Off, test results give no row.',
+    },
     countDebounceMs: {
       _type: Type.Number,
       _default: 600,
@@ -246,6 +255,7 @@ export interface ConfigObject {
     enabled: boolean;
     savedSearchMinCharacters: number;
     serverVocabulary: boolean;
+    testResults: boolean;
     countDebounceMs: number;
     programs: Array<CohortProgram>;
     drugGroups: Array<CohortDrugGroup>;
