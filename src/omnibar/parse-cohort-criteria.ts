@@ -100,14 +100,14 @@ function readNumber(tokens: Array<string>, start: number, P: CompiledPhrases): {
 
 /**
  * A number of years: the number, then perhaps a unit. Months count only in whole years ("24 months"
- * is 2), since the builder searches ages in years; any other unit makes it unreadable. `old` says the
- * unit names an age by itself ("30 years old").
+ * is 2, and `months` says so), since the builder searches ages in years; any other unit makes it
+ * unreadable. `old` says the unit names an age by itself ("30 years old").
  */
 function readYears(
   tokens: Array<string>,
   start: number,
   P: CompiledPhrases,
-): { years: number; next: number; old: boolean } | null {
+): { years: number; next: number; old: boolean; months: boolean } | null {
   const number = readNumber(tokens, start, P);
   if (!number) return null;
   const { value, next } = number;
@@ -115,21 +115,23 @@ function readYears(
   const years = matchPhrase(tokens, next, P.years);
   if (old !== null || years !== null) {
     const end = Math.max(old ?? 0, years ?? 0);
-    return { years: value, next: end, old: old !== null && old === end };
+    return { years: value, next: end, old: old !== null && old === end, months: false };
   }
   const months = matchPhrase(tokens, next, P.months);
   if (months !== null) {
-    return value % 12 === 0 ? { years: value / 12, next: months, old: true } : null;
+    return value % 12 === 0 ? { years: value / 12, next: months, old: true, months: true } : null;
   }
   if (matchPhrase(tokens, next, P.otherUnits) !== null) return null;
-  return { years: value, next, old: false };
+  return { years: value, next, old: false, months: false };
 }
 
+// The last value says whether months in whole years are exact: "under 24 months" is aged 1 or younger
+// and "at least 24 months" aged 2+, but "at most 12 months" would take in up to 23 months.
 const comparators = [
-  ['under', (n: number) => ({ maxAge: n - 1 })],
-  ['atMost', (n: number) => ({ maxAge: n })],
-  ['over', (n: number) => ({ minAge: n + 1 })],
-  ['atLeast', (n: number) => ({ minAge: n })],
+  ['under', (n: number) => ({ maxAge: n - 1 }), true],
+  ['atMost', (n: number) => ({ maxAge: n }), false],
+  ['over', (n: number) => ({ minAge: n + 1 }), false],
+  ['atLeast', (n: number) => ({ minAge: n }), true],
 ] as const;
 
 /** Every way an age can be written at `start`; the reading that takes the most words wins. */
@@ -146,14 +148,16 @@ function matchAge(tokens: Array<string>, start: number, P: CompiledPhrases): Mat
       matchPhrase(tokens, first.next, P.rangeTo) ??
       (rangeStart !== null && tokens[first.next] === 'and' ? first.next + 1 : null);
     const second = join !== null ? readYears(tokens, join, P) : null;
-    if (second) readings.push({ next: second.next, minAge: first.years, maxAge: second.years });
+    if (second && !first.months && !second.months) {
+      readings.push({ next: second.next, minAge: first.years, maxAge: second.years });
+    }
   }
 
   // "under 30", "at least 18", "> 65", "over the age of 50"
-  for (const [list, bounds] of comparators) {
+  for (const [list, bounds, exactInMonths] of comparators) {
     const comparator = matchPhrase(tokens, from, P[list]);
     const years = comparator !== null ? readYears(tokens, comparator, P) : null;
-    if (years) readings.push({ next: years.next, ...bounds(years.years) });
+    if (years && (exactInMonths || !years.months)) readings.push({ next: years.next, ...bounds(years.years) });
   }
 
   // "30 or younger", "65+", "18 and over", "30 years old", "aged 30"
@@ -161,9 +165,11 @@ function matchAge(tokens: Array<string>, start: number, P: CompiledPhrases): Mat
   if (years) {
     const orUnder = matchPhrase(tokens, years.next, P.orUnder);
     const orOver = matchPhrase(tokens, years.next, P.orOver);
-    if (orUnder !== null) readings.push({ next: orUnder, maxAge: years.years });
+    if (orUnder !== null && !years.months) readings.push({ next: orUnder, maxAge: years.years });
     if (orOver !== null) readings.push({ next: orOver, minAge: years.years });
-    if (years.old || aged !== null) readings.push({ next: years.next, minAge: years.years, maxAge: years.years });
+    if ((years.old || aged !== null) && !years.months) {
+      readings.push({ next: years.next, minAge: years.years, maxAge: years.years });
+    }
   }
 
   // "adolescents", "under fives", "women of reproductive age"
@@ -443,7 +449,7 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
     return null;
   }
   // The cohort builder reads an age of 0 as "not set", so "under 1" (or "under 12 months") would become
-  // everyone alive; it gives no row. "at most 12 months" is under 2, which the builder can search.
+  // everyone alive; it gives no row.
   if (maxAge === 0) {
     return null;
   }
