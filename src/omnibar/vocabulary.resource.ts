@@ -31,10 +31,9 @@ const nameOf = (value: unknown) =>
   typeof value === 'string' && value.trim() && value.length <= maxNameLength ? value.trim() : null;
 
 /** "TB Program" also as "TB": a name without a trailing program word, when something is left. */
-function withoutProgramWord(name: string): string | null {
+function withoutProgramWord(name: string, programWords: Array<string>): string | null {
   const words = name.split(/\s+/);
   const last = tokenize(words.at(-1) ?? '')?.join(' ');
-  const programWords = compilePhrases().programNouns.map((noun) => noun.join(' '));
   return words.length > 1 && programWords.includes(last) ? words.slice(0, -1).join(' ') : null;
 }
 
@@ -57,6 +56,7 @@ const entriesOf = (data: unknown) =>
 /** The answers read defensively: anything that isn't what the parser needs is left out. */
 export function toServerVocabulary(programData: unknown, encounterTypeData: unknown, locale: string): ServerVocabulary {
   const language = (locale ?? 'en').split(/[-_]/)[0].toLowerCase();
+  const programWords = compilePhrases().programNouns.map((noun) => noun.join(' '));
   const programs = entriesOf(programData).map((program) => {
     const label = nameOf(program.name);
     const conceptNames = (
@@ -73,8 +73,8 @@ export function toServerVocabulary(programData: unknown, encounterTypeData: unkn
       uuid: program.uuid as string,
       label,
       aliases: distinct(label, [
-        withoutProgramWord(label),
-        ...conceptNames.flatMap((name) => [name, withoutProgramWord(name)]),
+        withoutProgramWord(label, programWords),
+        ...conceptNames.flatMap((name) => [name, withoutProgramWord(name, programWords)]),
       ]),
     };
   });
@@ -115,6 +115,29 @@ export function mergeVocabulary(
 const currentUser = (): string | undefined => getSessionStore().getState().session?.user?.uuid;
 
 let cached: { key: string; value?: ServerVocabulary; promise?: Promise<ServerVocabulary> } | null = null;
+let following = false;
+
+/**
+ * Forgets the vocabulary as soon as the logged-in user changes or logs out, bar open or not: what one
+ * user may read isn't kept for the next. Subscribed once, on first use.
+ */
+function followSession() {
+  if (following) return;
+  following = true;
+  let user = currentUser();
+  getSessionStore().subscribe(() => {
+    const now = currentUser();
+    if (now !== user) {
+      user = now;
+      cached = null;
+    }
+  });
+}
+
+/** For tests: whether a vocabulary is kept. */
+export function hasServerVocabulary(): boolean {
+  return Boolean(cached?.value);
+}
 
 /** For tests: forget what was fetched. */
 export function forgetServerVocabulary() {
@@ -149,6 +172,7 @@ export function useServerVocabulary(enabled: boolean, locale: string): ServerVoc
 
   useEffect(() => {
     if (!enabled) return;
+    followSession();
     if (cached?.key === key && cached.value) {
       setState({ key, value: cached.value });
       return;
