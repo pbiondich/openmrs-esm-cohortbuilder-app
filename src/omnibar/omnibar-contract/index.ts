@@ -1,4 +1,5 @@
 export * from './types';
 export { withProviderBoundary } from './provider-boundary';
-export { looksLikeIdentifier } from './query-hints';
+export { withViewBoundary } from './view-boundary';
+export { looksLikeIdentifier, looksLikeQuestion } from './query-hints';
 export { isServerUnreachable } from './server-unreachable';
