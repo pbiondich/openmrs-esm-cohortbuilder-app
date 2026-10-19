@@ -467,6 +467,34 @@ describe('names from config or the server', () => {
     expect(parseCohortCriteria('patients in the HIV program on ARVs', named)?.criteria).toEqual([inHiv, onArvs]);
     expect(parseCohortCriteria('patients with an admission encounter', named)?.criteria).toEqual([admitted]);
   });
+
+  it('reads a name typed with one slip in all of its words, when no other name is one slip away', () => {
+    const breastCancer = '2d2e3f40-1111-4222-8333-444455556666';
+    const diabetes = '3d2e3f40-1111-4222-8333-444455556666';
+    const named: CohortCriteriaConfig = {
+      ...config,
+      programs: [
+        ...config.programs,
+        { uuid: breastCancer, label: 'Breast Cancer Program', aliases: ['breast cancer'] },
+        { uuid: diabetes, label: 'Diabetes Program', aliases: ['diabetes'] },
+      ],
+    };
+    const criteria = (text: string, programs = named.programs) =>
+      parseCohortCriteria(text, { ...named, programs })?.criteria ?? null;
+    const inBreastCancer: Criterion = { type: 'enrollment', programs: [breastCancer] };
+    expect(criteria('patients in the brest cancer program')).toEqual([inBreastCancer]);
+    expect(criteria('enrolled in breast cancor')).toEqual([inBreastCancer]);
+    expect(criteria('patients in the tuberclosis program')).toEqual([inTb]);
+    expect(criteria('enrolled in diabetis')).toEqual([{ type: 'enrollment', programs: [diabetes] }]);
+    expect(criteria('patients in the brest cancor program')).toBeNull();
+    expect(criteria('enrolled in brest cancor')).toBeNull();
+    expect(
+      criteria('enrolled in diabetis', [
+        ...named.programs,
+        { uuid: '4d2e3f40-1111-4222-8333-444455556666', label: 'Diabetic Clinic', aliases: ['diabetic'] },
+      ]),
+    ).toBeNull();
+  });
 });
 
 describe("a site's own phrases", () => {
