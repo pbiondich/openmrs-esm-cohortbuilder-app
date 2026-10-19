@@ -13,12 +13,14 @@ const hiv = '64f950e6-1b07-4ac0-8e7e-f3e148f3463f';
 const tb = '9f144a34-3a4a-44a9-8486-6b7af6cc64f6';
 const admission = 'e22e39fd-7db2-45e7-80f1-60fa0d5a4378';
 const tdf = '0b8c3c4e-2f9a-4b1e-9d5c-1a2b3c4d5e6f';
+const pmtct = 'd1b6cd43-8ac7-4cdd-8fb4-fe51635c82b4';
 
 const config: CohortCriteriaConfig = {
   drugCriteriaEnabled: true,
   programs: [
     { uuid: hiv, label: 'HIV Care and Treatment', aliases: ['hiv', 'hiv care', 'art'] },
     { uuid: tb, label: 'Tuberculosis Program', aliases: ['tb', 'tuberculosis'] },
+    { uuid: pmtct, label: 'PMTCT', aliases: ['pmtct'] },
   ],
   drugGroups: [
     { id: 'arv', label: 'ARVs', aliases: ['arv', 'arvs', 'antiretrovirals'], drugUuids: [tdf], cielConceptUuids: [] },
@@ -36,6 +38,7 @@ const women = (minAge?: number, maxAge?: number) => age(minAge, maxAge, 'female'
 const men = (minAge?: number, maxAge?: number) => age(minAge, maxAge, 'male');
 const inHiv: Criterion = { type: 'enrollment', programs: [hiv] };
 const inTb: Criterion = { type: 'enrollment', programs: [tb] };
+const inPmtct: Criterion = { type: 'enrollment', programs: [pmtct] };
 const onArvs: Criterion = { type: 'drugOrder', drugs: [tdf], activeOnOrAfter: 'today' };
 const admitted: Criterion = { type: 'encounter', encounterTypes: [admission] };
 
@@ -188,6 +191,9 @@ describe('the paraphrase set', () => {
     // Together
     ['women aged 15-49 on ARVs', [women(15, 49), onArvs]],
     ['women and on ARVs', [women(), onArvs]],
+    ['women under 30 on ARVs', [women(undefined, 29), onArvs]],
+    ['female children under 5', [women(undefined, 4)]],
+    ['adolescent girls in the PMTCT program', [women(10, 19), inPmtct]],
     ['women over 50 and under 60', [women(51, 59)]],
     ['how many women between 15 and 49 are enrolled in HIV?', [women(15, 49), inHiv]],
     ['men over 50 in the TB program', [men(51), inTb]],
@@ -265,6 +271,14 @@ describe('the paraphrase set', () => {
     'children and women',
     'adolescents with the women',
     'women of reproductive age and children',
+    // The same with an age or a criterion between them.
+    'women under 30 and children',
+    'women under 30 with children',
+    'women under 50 and children',
+    'men under 40 and adolescents',
+    'children under 5 and women',
+    'adolescents under 15 and women',
+    'women on ARVs and children',
     'a hundred patients',
     'patients aged one hundred',
     'cd4 count',
