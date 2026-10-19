@@ -150,7 +150,8 @@ const noAdditions = {};
 
 /**
  * The table ready to match, with a site's additions. Anything malformed in the additions is left out
- * rather than failing: a stopword that is, or contains, a word from `never`; a phrase that isn't
+ * rather than failing: an added phrase, or added age group phrase, holding a word from `never`, in any
+ * list, so a site can't make a negation or an alternative read as part of a criterion; a phrase that isn't
  * text, is longer than 80 characters or has a character the parser never reads; an age group without
  * whole-number bounds from 0 to 150 in order. Memoized per table and additions object.
  */
@@ -164,13 +165,16 @@ export function compilePhrases(
   if (cached) return cached;
 
   const never = new Set(table.never.flatMap((word) => tokenize(word) ?? []));
+  const holdsNever = (phrase: unknown) =>
+    typeof phrase !== 'string' || (tokenize(phrase) ?? []).some((token) => never.has(token));
   const lists = Object.fromEntries(
     phraseLists.map((list) => {
-      const added = Array.isArray(additions[list]) ? additions[list] : [];
+      const added = (Array.isArray(additions[list]) ? additions[list] : []).filter((phrase) => !holdsNever(phrase));
       return [list, compileList([...table[list], ...added])];
     }),
   ) as Record<PhraseList, Compiled>;
-  // A stopword is skipped wherever it stands, so it must never hide a negation or an alternative.
+  // The shipped table may hold reviewed phrases such as "not older than"; a stopword never may, since
+  // it is skipped wherever it stands.
   lists.stopwords = lists.stopwords.filter((tokens) => !tokens.some((token) => never.has(token)));
 
   const numbers = new Map(
@@ -178,7 +182,10 @@ export function compilePhrases(
   );
   const ageGroups = compileAgeGroups([
     ...table.ageGroups,
-    ...(Array.isArray(additions.ageGroups) ? additions.ageGroups : []),
+    ...(Array.isArray(additions.ageGroups) ? additions.ageGroups : []).map((group) => ({
+      ...group,
+      phrases: Array.isArray(group?.phrases) ? group.phrases.filter((phrase) => !holdsNever(phrase)) : [],
+    })),
   ]);
   const knownWords = new Set([
     ...Object.values(lists).flatMap((compiled) => compiled.flat()),
