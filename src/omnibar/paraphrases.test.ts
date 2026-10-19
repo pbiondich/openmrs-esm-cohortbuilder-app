@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type Criterion } from '../url-definition/url-definition';
-import { type CohortCriteriaConfig, parseCohortCriteria } from './parse-cohort-criteria';
+import { type CohortCriteriaConfig, parseCohortCriteria, unreadWords } from './parse-cohort-criteria';
 import { compilePhrases, englishPhrases, tokenize } from './phrases/phrase-table';
 
 /**
@@ -503,5 +503,105 @@ describe("a site's own phrases", () => {
       expect(parseCohortCriteria(text, { ...config, phrases })).toBeNull();
     }
     expect(parseCohortCriteria('patients under 30', { ...config, phrases })?.criteria).toEqual([age(undefined, 29)]);
+  });
+});
+
+describe('test results', () => {
+  const viralLoad = '856AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const cd4 = '5497AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const hb = '21AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const withTests: CohortCriteriaConfig = {
+    ...config,
+    tests: [
+      { uuid: viralLoad, label: 'HIV viral load', aliases: ['viral load', 'vl'], units: 'copies/mL' },
+      { uuid: cd4, label: 'CD4 count', aliases: ['cd4'], units: 'cells/µL' },
+      { uuid: hb, label: 'Haemoglobin', aliases: ['hb', 'hemoglobin'], units: 'g/dL' },
+    ],
+  };
+  const read = (text: string) => parseCohortCriteria(text, withTests)?.criteria ?? null;
+  const result = (concept: string, operator: string, value: number, more: object = {}): Criterion =>
+    ({ type: 'numericObs', concept, operator, value, ...more } as Criterion);
+
+  it.each<[string, Array<Criterion>]>([
+    ['patients with viral load over 1000', [result(viralLoad, 'gt', 1000)]],
+    ['VL > 1000', [result(viralLoad, 'gt', 1000)]],
+    ['vl >1000 copies/mL', [result(viralLoad, 'gt', 1000)]],
+    ['viral load over 1000 copies per ml', [result(viralLoad, 'gt', 1000)]],
+    ['viral load over 1,000', [result(viralLoad, 'gt', 1000)]],
+    ['how many patients have an HIV viral load above 1000?', [result(viralLoad, 'gt', 1000)]],
+    ['viral load not over 1000', [result(viralLoad, 'le', 1000)]],
+    ['most recent CD4 under 200', [result(cd4, 'lt', 200)]],
+    ['latest cd4 count < 200 cells/uL', [result(cd4, 'lt', 200)]],
+    ['lowest cd4 count below 200 cells/µL', [result(cd4, 'lt', 200, { which: 'lowest' })]],
+    ['nadir CD4 < 200', [result(cd4, 'lt', 200, { which: 'lowest' })]],
+    ['baseline CD4 at most 350', [result(cd4, 'le', 350, { which: 'first' })]],
+    ['peak viral load > 100000', [result(viralLoad, 'gt', 100000, { which: 'highest' })]],
+    ['any viral load over 1000', [result(viralLoad, 'gt', 1000, { which: 'any' })]],
+    ['viral load ever above 1000', [result(viralLoad, 'gt', 1000, { which: 'any' })]],
+    ['average hb under 10', [result(hb, 'lt', 10, { which: 'average' })]],
+    ['hb under 10.5 g/dL', [result(hb, 'lt', 10.5)]],
+    ['cd4 = 350', [result(cd4, 'eq', 350)]],
+    ['cd4 count of exactly 350', [result(cd4, 'eq', 350)]],
+    ['women with hb < 11', [women(), result(hb, 'lt', 11)]],
+    ['children under 5 with hemoglobin under 7', [age(undefined, 4), result(hb, 'lt', 7)]],
+    ['VL > 1000 in the last 6 months', [result(viralLoad, 'gt', 1000, { withinLastMonths: 6 })]],
+    ['viral load over 1000 within the past 2 weeks', [result(viralLoad, 'gt', 1000, { withinLastDays: 14 })]],
+    ['viral load over 1000 in the last 90 days', [result(viralLoad, 'gt', 1000, { withinLastDays: 90 })]],
+    ['viral load over 1000 over the past 2 years', [result(viralLoad, 'gt', 1000, { withinLastMonths: 24 })]],
+    ['viral load over 1000 since 2025', [result(viralLoad, 'gt', 1000, { onOrAfter: '2025-01-01' })]],
+    ['viral load over 1000 since 2025-03-01', [result(viralLoad, 'gt', 1000, { onOrAfter: '2025-03-01' })]],
+    ['VL > 1000 and CD4 < 200', [result(viralLoad, 'gt', 1000), result(cd4, 'lt', 200)]],
+    ['enrolled in HIV with a viral load over 1000', [inHiv, result(viralLoad, 'gt', 1000)]],
+  ])('reads %j', (text, criteria) => {
+    expect(read(text)).toEqual(criteria);
+  });
+
+  it.each([
+    // A unit that isn't the concept's: never converted, never guessed.
+    'viral load over 1000 copies',
+    'hb under 10 g/L',
+    'viral load over 1000 mg',
+    // No comparison, or no value to compare.
+    'viral load',
+    'viral load over',
+    'viral load over a lot',
+    'patients with a viral load',
+    // Alternatives and negations still end the reading.
+    'viral load under 1000 or over 50000',
+    'women not with hb under 11',
+    // Windows that can't be searched.
+    'VL > 1000 in the last 0 months',
+    'VL > 1000 in the last 300 months',
+    'VL > 1000 in the last year',
+    'VL > 1000 since 1850',
+    'VL > 1000 since 2025-02-30',
+    // A test the server didn't name.
+    'creatinine over 2',
+  ])('offers nothing for %j', (text) => {
+    expect(read(text)).toBeNull();
+  });
+
+  it('reads no test without the server naming it', () => {
+    expect(criteriaOf('viral load over 1000')).toBeNull();
+  });
+
+  it('labels the definition with the result, the comparison and the units', () => {
+    expect(parseCohortCriteria('women with lowest CD4 under 200', withTests).label).toBe(
+      'Female patients with lowest CD4 count < 200 cells/µL',
+    );
+  });
+
+  it.each<[string, string | null]>([
+    ['patients with viral loa', 'viral loa'],
+    ['women with cd4 under 200', 'cd4'],
+    ['women with CD4 count < 200', 'cd4 count'],
+    ['patients with viral load over 1000 in the last 6 months', 'viral load'],
+    ['how many patients have a serum creatinine above 2', 'serum creatinine'],
+    ['women aged 15-49', null],
+    ['women not on ARVs', null],
+    ['123456', null],
+    ['patients with b c d e f g h over 2', null],
+  ])('gives the words to look up in %j as %j', (text, words) => {
+    expect(unreadWords(text, config)).toBe(words);
   });
 });
