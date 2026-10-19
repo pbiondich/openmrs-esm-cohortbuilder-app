@@ -469,6 +469,29 @@ describe('CohortCountProvider', () => {
     expect(report.mock.calls.map(([sent]) => sent.results?.[0]?.title)).not.toContain('7 patients');
   });
 
+  it('stops asking again after three changes of user during one count, with a plain error', async () => {
+    const users = ['a', 'b'].map((letter) => `a1b2c3d4-0000-4000-8000-00000000000${letter}`);
+    let switches = 0;
+    const flip = () =>
+      getSessionStore().setState({
+        loaded: true,
+        session: { authenticated: true, user: { uuid: users[switches++ % 2] } } as never,
+      });
+    onTestFinished(() => {
+      getSessionStore().setState({ loaded: false, session: null });
+    });
+    flip();
+    // The session changes while every answer is on its way.
+    mockOpenmrsFetch.mockImplementation(async () => {
+      flip();
+      return { data: { result: { memberIds: [1] } } } as FetchResponse;
+    });
+    const { last } = renderProvider(CohortCountProvider, 'women under 30');
+    await settle();
+    expect(requests()).toHaveLength(4);
+    expect(last()).toEqual({ query: 'women under 30', title: 'Patient count', status: 'error' });
+  });
+
   it('counts again on another day, since ages and "today" move', async () => {
     renderProvider(CohortCountProvider, 'women under 30').rerender('women under 30');
     await settle();
