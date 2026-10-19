@@ -34,8 +34,7 @@ function withoutBracketedEnd(name: string | null): string | null {
 }
 
 /** The numeric concepts in a concept search answer, read defensively. */
-export function toTests(data: unknown, locale: string): Array<CohortTest> {
-  const language = (locale ?? 'en').split(/[-_]/)[0].toLowerCase();
+export function toTests(data: unknown, _locale?: string): Array<CohortTest> {
   const results = isPlainObject(data) && Array.isArray(data.results) ? data.results : [];
   return results.flatMap((concept) => {
     if (!isPlainObject(concept) || !isUuid(concept.uuid)) return [];
@@ -43,8 +42,7 @@ export function toTests(data: unknown, locale: string): Array<CohortTest> {
     const label = textOf(concept.display, maxNameLength);
     if (!label) return [];
     const names = (Array.isArray(concept.names) ? concept.names : [])
-      .filter((name) => isPlainObject(name) && typeof name.locale === 'string')
-      .filter((name) => ['en', language].includes(String(name.locale).split(/[-_]/)[0].toLowerCase()))
+      .filter(isPlainObject)
       .map((name) => textOf(name.name, maxNameLength));
     const seen = new Set([label.toLowerCase()]);
     // Each name also without a trailing unit in brackets, as CIEL writes "Weight (kg)": the unit is
