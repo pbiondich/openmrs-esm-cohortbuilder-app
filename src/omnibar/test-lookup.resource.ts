@@ -27,6 +27,12 @@ const lookupUrl = (words: string) =>
 const textOf = (value: unknown, max: number) =>
   typeof value === 'string' && value.trim() && value.length <= max ? value.trim() : null;
 
+/** "Weight (kg)" as "Weight"; null when there is no bracketed end or nothing before it. */
+function withoutBracketedEnd(name: string | null): string | null {
+  const stripped = name?.replace(/\s*\([^()]*\)\s*$/, '').trim();
+  return stripped && stripped !== name ? stripped : null;
+}
+
 /** The numeric concepts in a concept search answer, read defensively. */
 export function toTests(data: unknown, locale: string): Array<CohortTest> {
   const language = (locale ?? 'en').split(/[-_]/)[0].toLowerCase();
@@ -36,11 +42,15 @@ export function toTests(data: unknown, locale: string): Array<CohortTest> {
     if (!isPlainObject(concept.datatype) || concept.datatype.hl7Abbreviation !== 'NM') return [];
     const label = textOf(concept.display, maxNameLength);
     if (!label) return [];
-    const seen = new Set([label.toLowerCase()]);
-    const aliases = (Array.isArray(concept.names) ? concept.names : [])
+    const names = (Array.isArray(concept.names) ? concept.names : [])
       .filter((name) => isPlainObject(name) && typeof name.locale === 'string')
       .filter((name) => ['en', language].includes(String(name.locale).split(/[-_]/)[0].toLowerCase()))
-      .map((name) => textOf(name.name, maxNameLength))
+      .map((name) => textOf(name.name, maxNameLength));
+    const seen = new Set([label.toLowerCase()]);
+    // Each name also without a trailing unit in brackets, as CIEL writes "Weight (kg)": the unit is
+    // the concept's anyway, and checked against it.
+    const aliases = [label, ...names]
+      .flatMap((name) => [name, withoutBracketedEnd(name)])
       .filter((name): name is string => {
         if (!name || seen.has(name.toLowerCase())) return false;
         seen.add(name.toLowerCase());
