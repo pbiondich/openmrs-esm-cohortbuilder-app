@@ -53,7 +53,6 @@ const createExpectedQuery = (date: dayjs.Dayjs) => ({
         key: 'reporting.library.cohortDefinition.builtIn.numericObsSearchAdvanced',
         parameterValues: {
           onOrAfter: date.format(),
-          operator1: 'LESS_THAN',
           question: '2a08da66-f326-4cac-b4cc-6efd68333847',
           timeModifier: 'ANY',
         },
@@ -143,9 +142,8 @@ describe('Test the search by concept component', () => {
     // Verify the row filter structure matches expected
     expect(actualQuery.query.rowFilters[0].key).toBe(expectedQuery.query.rowFilters[0].key);
     expect(actualQuery.query.rowFilters[0].type).toBe(expectedQuery.query.rowFilters[0].type);
-    expect(actualQuery.query.rowFilters[0].parameterValues.operator1).toBe(
-      expectedQuery.query.rowFilters[0].parameterValues.operator1,
-    );
+    // No value was entered, so there's no comparison to send.
+    expect(actualQuery.query.rowFilters[0].parameterValues).not.toHaveProperty('operator1');
     expect(actualQuery.query.rowFilters[0].parameterValues.question).toBe(
       expectedQuery.query.rowFilters[0].parameterValues.question,
     );
