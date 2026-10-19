@@ -11,6 +11,8 @@ const tb = '9f144a34-3a4a-44a9-8486-6b7af6cc64f6';
 const tdf = '0b8c3c4e-2f9a-4b1e-9d5c-1a2b3c4d5e6f';
 const efv = '1c9d4d5f-3a0b-4c2f-8e6d-2b3c4d5e6f70';
 const tldDrug = '165086AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const admission = 'e22e39fd-7db2-45e7-80f1-60fa0d5a4378';
+const vitals = '67a71486-1a54-468f-ac3e-7091a9a79584';
 
 const config: CohortCriteriaConfig = {
   drugCriteriaEnabled: true,
@@ -29,6 +31,10 @@ const config: CohortCriteriaConfig = {
     { id: 'tld', label: 'TLD', aliases: ['tld'], drugUuids: [tldDrug], cielConceptUuids: [] },
     { id: 'statins', label: 'Statins', aliases: ['statin', 'statins'], drugUuids: [], cielConceptUuids: [] },
   ],
+  encounterTypes: [
+    { uuid: admission, label: 'Admission', aliases: ['admission', 'inpatient admission'] },
+    { uuid: vitals, label: 'Vitals', aliases: ['vitals', 'vital signs'] },
+  ],
 };
 
 const demographics = (gender: 'male' | 'female' | 'any', minAge?: number, maxAge?: number): Criterion => ({
@@ -44,6 +50,7 @@ const drugOrder = (...drugs: Array<string>): Criterion => ({
   activeOnOrAfter: 'today',
 });
 const arvs = drugOrder(tdf, efv);
+const encounter = (encounterType: string): Criterion => ({ type: 'encounter', encounterTypes: [encounterType] });
 
 describe('parseCohortCriteria', () => {
   it.each<[string, Array<Criterion>]>([
@@ -134,6 +141,77 @@ describe('parseCohortCriteria', () => {
     ['a concept lookup', 'cd4 count'],
   ])('rejects %s: %j', (_label, text) => {
     expect(parseCohortCriteria(text, config)).toBeNull();
+  });
+
+  describe('counting phrasing', () => {
+    it.each<[string, string]>([
+      ['how many women', 'women'],
+      ['how many patients are under 30?', 'patients under 30'],
+      ['How many patients are there under 30', 'patients under 30'],
+      ['count of men over 50', 'men over 50'],
+      ['count women aged 15-49', 'women aged 15-49'],
+      ['number of patients enrolled in HIV program', 'patients enrolled in HIV program'],
+      ['what is the total number of patients in the TB program', 'patients in the TB program'],
+      ['how many patients have had an admission encounter', 'patients with an admission encounter'],
+    ])('reads %j as %j', (counting, plain) => {
+      expect(parseCohortCriteria(counting, config)).toEqual(parseCohortCriteria(plain, config));
+      expect(parseCohortCriteria(counting, config)).not.toBeNull();
+    });
+
+    it.each(['how many', 'count', 'number of patients', 'how many HIV patients', 'how many patients with HIV'])(
+      'offers nothing for %j, which names no criterion it can read',
+      (text) => {
+        expect(parseCohortCriteria(text, config)).toBeNull();
+      },
+    );
+  });
+
+  describe('encounter types', () => {
+    it.each<[string, Array<Criterion>]>([
+      ['patients with an admission encounter', [encounter(admission)]],
+      ['admission encounters', [encounter(admission)]],
+      ['women with a vital signs encounter', [demographics('female'), encounter(vitals)]],
+      ['patients with inpatient admission encounters', [encounter(admission)]],
+    ])('reads %j', (text, criteria) => {
+      expect(parseCohortCriteria(text, config).criteria).toEqual(criteria);
+    });
+
+    it('ANDs two encounter types, each with its own "encounter"', () => {
+      expect(
+        parseCohortCriteria('patients with a vitals encounter and an admission encounter', config).criteria,
+      ).toEqual([encounter(vitals), encounter(admission)]);
+    });
+
+    it.each([
+      'admission',
+      'patients with admission',
+      'an admission visit',
+      'with a discharge encounter',
+      // Each type needs its own "encounter", so a list of them isn't read.
+      'men under 30 with vitals and admission encounters',
+    ])('offers nothing for %j without the word "encounter" or with an unknown type', (text) => {
+      expect(parseCohortCriteria(text, config)).toBeNull();
+    });
+
+    it('describes encounters in the label', () => {
+      expect(parseCohortCriteria('women with an admission encounter', config).label).toBe(
+        'Female patients with Admission encounters',
+      );
+    });
+
+    it('rejects encounter types whose uuids the cohort builder would refuse', () => {
+      expect(
+        parseCohortCriteria('admission encounters', {
+          ...config,
+          encounterTypes: [{ uuid: 'reporting.library.x', label: 'Admission', aliases: ['admission'] }],
+        }),
+      ).toBeNull();
+    });
+
+    it('understands no encounter type with none configured', () => {
+      expect(parseCohortCriteria('admission encounters', { ...config, encounterTypes: [] })).toBeNull();
+      expect(parseCohortCriteria('admission encounters', { ...config, encounterTypes: undefined })).toBeNull();
+    });
   });
 
   it('describes the cohort in its label', () => {
@@ -238,6 +316,7 @@ describe('parseCohortCriteria', () => {
         drugCriteriaEnabled: true,
         programs: config.omnibar.programs,
         drugGroups: config.omnibar.drugGroups,
+        encounterTypes: config.omnibar.encounterTypes,
       });
     });
 
