@@ -365,6 +365,13 @@ const isAge = (value: number | undefined) =>
 const joiners = new Set(['and', 'with']);
 const isPopulation = (clause: Clause) => clause.kind === 'gender' || (clause.kind === 'age' && clause.group);
 
+/** Whether a named age group's phrase is exactly the words from `start` to `next`, as "under 5" is. */
+const namesAgeGroup = (tokens: Array<string>, start: number, next: number, P: CompiledPhrases) =>
+  P.ageGroups.some(
+    ({ tokens: words }) =>
+      start + words.length === next && words.every((word, offset) => tokens[start + offset] === word),
+  );
+
 export function parseCohortCriteria(text: string, config: CohortCriteriaConfig): CohortDefinition | null {
   const P = config.phrases ?? compilePhrases();
   const tokens = tokenize(text);
@@ -418,6 +425,8 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
       if (joined) return null;
       population = true;
     }
+    // "women and under 5": read as a bound, "under 5" is still the named group, a second population.
+    if (joined && clause.kind === 'age' && namesAgeGroup(tokens, i, match.next, P)) return null;
     if (clause.kind === 'gender' || (clause.kind === 'age' && clause.gender)) {
       if (gender && gender !== clause.gender) return null;
       gender = clause.gender;
