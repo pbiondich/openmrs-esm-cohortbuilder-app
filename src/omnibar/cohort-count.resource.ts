@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { getSessionStore, openmrsFetch, restBaseUrl } from '@openmrs/esm-framework';
 import type { Query } from '../types';
 import { isUuid } from '../url-definition/url-definition';
-import { isServerUnreachable } from './omnibar-contract';
 import { isPlainObject } from './saved-search.resource';
 
 /**
@@ -103,15 +102,18 @@ function remember(key: string, count: number, askedBy: string | undefined) {
 
 export interface CohortCountState {
   key: string | null;
+  /** Who the state is for. */
+  user: string | undefined;
   count?: number;
   loading: boolean;
   error: boolean;
-  /** The request failed because the server couldn't be reached. */
+  /** The server couldn't be reached or failed to answer. */
   unavailable: boolean;
 }
 
-const settled = (key: string | null, count?: number): CohortCountState => ({
+const settled = (key: string | null, user: string | undefined, count?: number): CohortCountState => ({
   key,
+  user,
   count,
   loading: false,
   error: false,
@@ -122,61 +124,68 @@ const settled = (key: string | null, count?: number): CohortCountState => ({
  * Settled with the remembered count, or loading for a key not yet counted. Called while rendering, so
  * it may forget the previous user's counts there: repeating that changes nothing.
  */
-const initial = (key: string | null) =>
-  key && rememberedCounts().has(key) ? settled(key, counts.get(key)) : { ...settled(key), loading: Boolean(key) };
+const initial = (key: string | null, user: string | undefined) =>
+  key && rememberedCounts().has(key)
+    ? settled(key, user, counts.get(key))
+    : { ...settled(key, user), loading: Boolean(key) };
+
+const subscribeToSession = (onChange: () => void) => getSessionStore().subscribe(onChange);
 
 /**
  * The count of `query`, asked for once the same `key` has been in place for `delayMs`, so the server
  * isn't asked per keystroke. A key the user has moved past is aborted and its answer ignored. The
  * query is read when the count is asked for; one key must always stand for the same cohort.
+ *
+ * A count is only ever shown to the user who asked for it: when someone else logs in, the count is
+ * asked again for them at once, up to maxReasks times in a row, so a session that keeps changing ends
+ * in a plain error rather than a loop.
  */
 export function useCohortCount(key: string | null, query: Query | null, delayMs: number): CohortCountState {
-  const [state, setState] = useState<CohortCountState>(() => initial(key));
+  const user = useSyncExternalStore(subscribeToSession, currentUser);
+  const [state, setState] = useState<CohortCountState>(() => initial(key, user));
   const queryRef = useRef(query);
   queryRef.current = query;
+  const asked = useRef({ key, user, reasks: 0 });
 
   useEffect(() => {
+    const reask = asked.current.key === key && asked.current.user !== user;
+    asked.current = { key, user, reasks: reask ? asked.current.reasks + 1 : 0 };
     if (!key || !queryRef.current || rememberedCounts().has(key)) {
-      setState(initial(key));
+      setState(initial(key, user));
+      return;
+    }
+    if (asked.current.reasks > maxReasks) {
+      setState({ ...settled(key, user), error: true });
       return;
     }
 
-    setState(initial(key));
+    setState(initial(key, user));
     const controller = new AbortController();
-    // An answer asked for by someone no longer logged in is never shown: the count is asked again, up to
-    // maxReasks times, so a session that keeps changing ends in a plain error rather than a loop.
-    let reasks = 0;
-    const ask = () => {
-      const askedBy = currentUser();
+    // An answer that arrives after the user changed is dropped: the change asks again.
+    const ask = () =>
       countCohort(queryRef.current, controller.signal).then(
         (count) => {
-          if (controller.signal.aborted) return;
-          if (askedBy !== currentUser()) return reaskOrGiveUp();
-          remember(key, count, askedBy);
-          setState(settled(key, count));
+          if (controller.signal.aborted || user !== currentUser()) return;
+          remember(key, count, user);
+          asked.current.reasks = 0;
+          setState(settled(key, user, count));
         },
         (error: unknown) => {
-          if (controller.signal.aborted) return;
-          if (askedBy !== currentUser()) return reaskOrGiveUp();
-          setState({ ...settled(key), error: true, unavailable: isServerUnreachable(error) });
+          if (controller.signal.aborted || user !== currentUser()) return;
+          setState({ ...settled(key, user), error: true, unavailable: !(error instanceof UnreadableCountError) });
         },
       );
-    };
-    const reaskOrGiveUp = () => {
-      if (++reasks > maxReasks) {
-        setState({ ...settled(key), error: true });
-        return;
-      }
+    const timer = reask ? undefined : setTimeout(ask, Math.max(0, delayMs));
+    if (reask) {
       ask();
-    };
-    const timer = setTimeout(ask, Math.max(0, delayMs));
+    }
 
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [key, delayMs]);
+  }, [key, delayMs, user]);
 
-  // Until the effect has caught up with a new key, the old state answers a different question.
-  return state.key === key ? state : initial(key);
+  // Until the effect has caught up with a new key or user, the old state answers a different question.
+  return state.key === key && state.user === user ? state : initial(key, user);
 }
