@@ -117,7 +117,10 @@ const settled = (key: string | null, count?: number): CohortCountState => ({
   unavailable: false,
 });
 
-/** Settled with the remembered count, or loading for a key not yet counted. */
+/**
+ * Settled with the remembered count, or loading for a key not yet counted. Called while rendering, so
+ * it may forget the previous user's counts there: repeating that changes nothing.
+ */
 const initial = (key: string | null) =>
   key && rememberedCounts().has(key) ? settled(key, counts.get(key)) : { ...settled(key), loading: Boolean(key) };
 
@@ -139,21 +142,24 @@ export function useCohortCount(key: string | null, query: Query | null, delayMs:
 
     setState(initial(key));
     const controller = new AbortController();
-    const timer = setTimeout(() => {
+    // An answer asked for by someone no longer logged in is never shown: the count is asked again.
+    const ask = () => {
       const askedBy = currentUser();
       countCohort(queryRef.current, controller.signal).then(
         (count) => {
           if (controller.signal.aborted) return;
+          if (askedBy !== currentUser()) return ask();
           remember(key, count, askedBy);
           setState(settled(key, count));
         },
         (error: unknown) => {
-          if (!controller.signal.aborted) {
-            setState({ ...settled(key), error: true, unavailable: isServerUnreachable(error) });
-          }
+          if (controller.signal.aborted) return;
+          if (askedBy !== currentUser()) return ask();
+          setState({ ...settled(key), error: true, unavailable: isServerUnreachable(error) });
         },
       );
-    }, Math.max(0, delayMs));
+    };
+    const timer = setTimeout(ask, Math.max(0, delayMs));
 
     return () => {
       clearTimeout(timer);
