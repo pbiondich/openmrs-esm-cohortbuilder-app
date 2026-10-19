@@ -528,7 +528,21 @@ describe('CohortCountProvider', () => {
   it.each([
     ['fetch failing', new TypeError('Failed to fetch')],
     ['a gateway timeout', Object.assign(new Error('Gateway Timeout'), { response: { status: 504 } })],
-  ])('says it is unavailable, and no more, on %s', async (_, error) => {
+    [
+      'a request the server refuses',
+      Object.assign(new Error('Failed to evaluate: women 15-49'), {
+        response: { status: 400 },
+        responseBody: { error: { message: 'Failed to evaluate: women 15-49' } },
+      }),
+    ],
+    [
+      'a server error',
+      Object.assign(new Error('NullPointerException in CohortDefinitionService'), {
+        response: { status: 500 },
+        responseBody: { error: { message: 'NullPointerException in CohortDefinitionService' } },
+      }),
+    ],
+  ])("says it is unavailable, and no more, never with the server's message, on %s", async (_, error) => {
     mockOpenmrsFetch.mockRejectedValue(error);
     const { last } = renderProvider(CohortCountProvider, 'women');
     await settle();
@@ -538,15 +552,6 @@ describe('CohortCountProvider', () => {
       status: 'error',
       detail: { state: 'unavailable' },
     });
-  });
-
-  it("reports any other failure as a plain error, never with the server's message", async () => {
-    mockOpenmrsFetch.mockRejectedValue(
-      Object.assign(new Error('Failed to evaluate: women 15-49'), { response: { status: 400 } }),
-    );
-    const { last } = renderProvider(CohortCountProvider, 'women');
-    await settle();
-    expect(last()).toEqual({ query: 'women', title: 'Patient count', status: 'error' });
   });
 
   it.each<[string, { count?: unknown; ids?: unknown }, string]>([
