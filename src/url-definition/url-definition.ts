@@ -391,6 +391,11 @@ export function buildSearch(
   }
 }
 
+/** A definition's description: each criterion's, as its search tab words it, ANDed. */
+export function describeSearches(searches: Search[]): string {
+  return searches.map(({ description }) => description).join(' AND ');
+}
+
 function toDropdownValues(uuids: string[], names: Map<string, string>): DropdownValue[] {
   return uuids.map((uuid, index) => ({ id: index, label: names.get(uuid) ?? uuid, value: uuid }));
 }

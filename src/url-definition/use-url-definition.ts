@@ -7,6 +7,7 @@ import { createCompositionQuery } from '../components/composition/composition.ut
 import { getSearchHistory } from '../components/search-history/search-history.utils';
 import {
   buildSearch,
+  describeSearches,
   LinkError,
   type CohortDefinition,
   readUrlRequest,
@@ -130,13 +131,15 @@ async function runRequest(request: UrlRequest, handlers: UrlDefinitionHandlers, 
 /**
  * Runs each criterion as its own search, then a composition ANDing them. If anything fails, the
  * history entries this link added are removed again, so a link never leaves half of its searches behind.
+ * Every entry is described in the builder's own words for its criteria; the link's label is never
+ * shown, so a link can't call one population another.
  */
 async function runDefinition(
   definition: CohortDefinition,
   { runSearch, onHistoryChange }: UrlDefinitionHandlers,
   drugOrderSearchDefinitionKey: string,
 ) {
-  const { label, criteria } = definition;
+  const { criteria } = definition;
   const names = await fetchDisplayNames(definition);
   // 1-based history positions of the entries this link added. Searches run meanwhile from the tabs are not included.
   const addedEntries: number[] = [];
@@ -154,16 +157,14 @@ async function runDefinition(
   };
 
   try {
-    for (const criterion of criteria) {
-      const search = buildSearch(criterion, names, drugOrderSearchDefinitionKey);
-      // A single criterion is the whole result, so it carries the label; otherwise the composition does.
-      await runAndRecord({ ...search, description: criteria.length === 1 && label ? label : search.description });
+    const searches = criteria.map((criterion) => buildSearch(criterion, names, drugOrderSearchDefinitionKey));
+    for (const search of searches) {
+      await runAndRecord(search);
     }
-    if (criteria.length >= 2) {
-      const composition = addedEntries.join(' AND ');
+    if (searches.length >= 2) {
       await runAndRecord({
-        searchParams: createCompositionQuery(composition),
-        description: label || `Composition of ${composition}`,
+        searchParams: createCompositionQuery(addedEntries.join(' AND ')),
+        description: describeSearches(searches),
       });
     }
   } catch (error) {
