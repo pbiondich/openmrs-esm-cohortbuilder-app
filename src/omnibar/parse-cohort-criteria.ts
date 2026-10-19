@@ -232,6 +232,18 @@ function sameWord(typed: string | undefined, word: string, P: CompiledPhrases, s
 
 type Named = { label: string; aliases: Array<string> };
 
+// Each item's names as words, worked out once per item rather than at every position of every keystroke.
+const wordsOfNames = new WeakMap<Named, Array<Array<string>>>();
+
+function namesOf(item: Named): Array<Array<string>> {
+  let names = wordsOfNames.get(item);
+  if (!names) {
+    names = [item.label, ...(item.aliases ?? [])].map((name) => tokenize(name ?? '')).filter((words) => words?.length);
+    wordsOfNames.set(item, names);
+  }
+  return names;
+}
+
 /**
  * The item whose label or alias matches the most words from `start`: exactly if any does, else with
  * a slip in a long word ("tuberculoses", "diabetis"). Two items reading the same words is ambiguous,
@@ -248,9 +260,8 @@ function longestAlias<T extends Named>(
     let tied = false;
     for (const item of items) {
       let length = 0;
-      for (const name of [item.label, ...(item.aliases ?? [])]) {
-        const words = tokenize(name ?? '');
-        if (words?.length && words.every((word, offset) => sameWord(tokens[start + offset], word, P, slips))) {
+      for (const words of namesOf(item)) {
+        if (words.every((word, offset) => sameWord(tokens[start + offset], word, P, slips))) {
           length = Math.max(length, words.length);
         }
       }
@@ -380,6 +391,8 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
       gender = clause.gender;
     }
     if (clause.kind === 'age' && clause.group) {
+      // Two named groups are likely an "or" or a slip, never the narrow band between them.
+      if (banded) return null;
       banded = true;
       bandMin = Math.max(bandMin, clause.minAge ?? 0);
       bandMax = Math.min(bandMax, clause.maxAge ?? MAX_AGE);
@@ -410,7 +423,8 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
   if (minAge != null && maxAge != null && minAge > maxAge) {
     return null;
   }
-  // The cohort builder reads an age of 0 as "not set", so "under 1" would become everyone alive.
+  // The cohort builder reads an age of 0 as "not set", so "under 1" (or "under 12 months") would become
+  // everyone alive; it gives no row. "at most 12 months" is under 2, which the builder can search.
   if (maxAge === 0) {
     return null;
   }
