@@ -14,6 +14,8 @@ const queryUuid = '0d1b7a4e-6f3c-4b3a-9c3e-2a6f5a8b9c10';
 const patientUuid = '8673ee4f-e2ab-4077-ba55-4980f408773e';
 const missingUuid = '11111111-2222-4333-8444-555555555555';
 const encounterTypeUuid = 'e22e39fd-7db2-45e7-80f1-60fa0d5a4378';
+const viralLoadUuid = '856AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const rapidTestUuid = '1040AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
 // The search tabs are not involved in opening a link and are slow to render.
 vi.mock('../components/search-by-concepts/search-by-concepts.component', () => ({ default: () => null }));
@@ -73,6 +75,12 @@ function mockServer() {
     }
     if (url.includes(`/program/${programUuid}`)) {
       return { data: { display: 'HIV Care and Treatment' } } as never;
+    }
+    if (url.includes(`/concept/${viralLoadUuid}`)) {
+      return { data: { display: 'HIV viral load', units: 'copies/mL', datatype: { hl7Abbreviation: 'NM' } } } as never;
+    }
+    if (url.includes(`/concept/${rapidTestUuid}`)) {
+      return { data: { display: 'HIV rapid test', datatype: { hl7Abbreviation: 'CWE' } } } as never;
     }
     if (url.includes(`/encountertype/${encounterTypeUuid}`)) {
       return { data: { display: 'Adult Visit' } } as never;
@@ -179,6 +187,42 @@ describe('useUrlDefinition', () => {
         parameterValues: { encounterTypeList: [encounterTypeUuid] },
       }),
     ]);
+  });
+
+  it("searches a test result with the concept's name and units from the server", async () => {
+    const test = { type: 'numericObs', concept: viralLoadUuid, operator: 'gt', value: 1000, withinLastMonths: 6 };
+    openBuilderAt(`?definition=${encode({ v: 1, criteria: [test] })}`);
+
+    await waitFor(() => expect(history()).toHaveLength(1));
+    expect(history()[0].description).toBe('Patients with most recent HIV viral load > 1000 copies/mL since 17/4/2026');
+    expect(mockOpenmrsFetch).toHaveBeenCalledWith(
+      expect.stringMatching(
+        new RegExp(`/concept/${viralLoadUuid}\\?v=custom:\\(display,units,datatype:\\(hl7Abbreviation\\)\\)$`),
+      ),
+    );
+    expect(adHocQueryBodies()[0].rowFilters).toEqual([
+      expect.objectContaining({
+        key: 'reporting.library.cohortDefinition.builtIn.numericObsSearchAdvanced',
+        parameterValues: expect.objectContaining({
+          question: viralLoadUuid,
+          operator1: 'GREATER_THAN',
+          value1: '1000',
+        }),
+      }),
+    ]);
+  });
+
+  it.each([
+    ['is not numeric', rapidTestUuid],
+    ['cannot be loaded', missingUuid],
+  ])('runs nothing when the test in a link %s', async (_, concept) => {
+    const test = { type: 'numericObs', concept, operator: 'gt', value: 1 };
+    openBuilderAt(`?definition=${encode({ v: 1, criteria: [test] })}`);
+
+    expect(await screen.findByText('This cohort builder link could not be opened')).toBeInTheDocument();
+    expect(screen.getByText("This link's test result isn't a numeric test on this server")).toBeInTheDocument();
+    expect(adHocQueryBodies()).toHaveLength(0);
+    expect(history()).toHaveLength(0);
   });
 
   it('composes only its own entries when a search from a tab lands in between', async () => {
