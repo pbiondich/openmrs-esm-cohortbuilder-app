@@ -12,6 +12,11 @@ vi.mock('react-i18next', async () => {
   return { useTranslation: () => ({ t: i18n.t.bind(i18n) }) };
 });
 
+vi.mock('@openmrs/esm-framework', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  openmrsFetch: vi.fn(async () => ({ data: { display: "PEP/PrEP <b>Don't</b>" } })),
+}));
+
 const handlers = {
   runSearch: vi.fn(async () => false),
   showCohort: vi.fn(async () => true),
@@ -26,8 +31,8 @@ function LinkError() {
 
 describe('useUrlDefinition with real i18next interpolation', () => {
   it('shows interpolated values as plain text, not escaped twice', async () => {
-    const label = "PEP/PrEP <b>Don't</b>";
-    const definition = { v: 1, label, criteria: [{ type: 'demographics', minAge: 18 }] };
+    const programUuid = '64f950e6-1b07-4ac0-8e7e-f3e148f3463f';
+    const definition = { v: 1, criteria: [{ type: 'enrollment', programs: [programUuid] }] };
     const encoded = Buffer.from(JSON.stringify(definition)).toString('base64url');
     window.history.replaceState(null, '', `/openmrs/spa/cohort-builder?definition=${encoded}`);
 
@@ -35,7 +40,7 @@ describe('useUrlDefinition with real i18next interpolation', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('link-error')).toHaveTextContent(
-        `The search "${label}" failed, so none of this link's searches were kept`,
+        `The search "Patients enrolled in PEP/PrEP <b>Don't</b>" failed, so none of this link's searches were kept`,
       ),
     );
     // Literal text, not an element: React serializes the text node with escaped brackets.

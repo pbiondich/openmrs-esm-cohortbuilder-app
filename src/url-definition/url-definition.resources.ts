@@ -2,7 +2,7 @@ import { openmrsFetch, restBaseUrl } from '@openmrs/esm-framework';
 import { type CohortDefinition, isUuid } from './url-definition';
 
 /**
- * Looks up display names for the programs and drugs in a definition, for history descriptions only.
+ * Looks up display names for the programs, drugs and encounter types in a definition, for history descriptions only.
  * Best effort: anything that fails to load is left out and counted in the description instead.
  */
 export async function fetchDisplayNames(definition: CohortDefinition): Promise<Map<string, string>> {
@@ -12,6 +12,8 @@ export async function fetchDisplayNames(definition: CohortDefinition): Promise<M
         return criterion.programs.map((uuid) => ['program', uuid] as [string, string]);
       case 'drugOrder':
         return criterion.drugs.map((uuid) => ['drug', uuid] as [string, string]);
+      case 'encounter':
+        return criterion.encounterTypes.map((uuid) => ['encountertype', uuid] as [string, string]);
       default:
         return [];
     }

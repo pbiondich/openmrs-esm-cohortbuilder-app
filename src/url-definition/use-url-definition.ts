@@ -7,6 +7,7 @@ import { createCompositionQuery } from '../components/composition/composition.ut
 import { getSearchHistory } from '../components/search-history/search-history.utils';
 import {
   buildSearch,
+  describeSearches,
   LinkError,
   type CohortDefinition,
   readUrlRequest,
@@ -51,7 +52,7 @@ export function useUrlDefinition({
       isRunning.current = true;
       setError(null);
       try {
-        await runRequest(readUrlRequest(params), handlers, drugOrderSearchDefinitionKey);
+        await runRequest(readLinkRequest(params), handlers, drugOrderSearchDefinitionKey);
       } catch (linkError) {
         setError(linkError);
       }
@@ -95,6 +96,18 @@ export function useUrlDefinition({
   return t(error.key, error.defaultMessage, { ...error.options, interpolation: { escapeValue: false } });
 }
 
+/**
+ * The link's request, or one plain error for any link that isn't valid. The reason stays out of the
+ * page: it can quote the link, and anyone can write a link.
+ */
+function readLinkRequest(params: URLSearchParams): UrlRequest {
+  try {
+    return readUrlRequest(params);
+  } catch {
+    throw new LinkError('invalidCohortLink', "This link isn't a valid cohort query");
+  }
+}
+
 function removeUrlParams() {
   const url = new URL(window.location.href);
   URL_PARAMS.forEach((name) => url.searchParams.delete(name));
@@ -122,13 +135,15 @@ async function runRequest(request: UrlRequest, handlers: UrlDefinitionHandlers, 
  * Runs each criterion as its own search, then a composition ANDing them. If anything fails, the
  * history entries this link added are removed again, so a link never leaves half of its searches behind.
  * The tabs are filled in first, so a link whose search fails can still be fixed and run again.
+ * Every entry is described in the builder's own words for its criteria; the link's label is never
+ * shown, so a link can't call one population another.
  */
 async function runDefinition(
   definition: CohortDefinition,
   { runSearch, onHistoryChange, onDefinition }: UrlDefinitionHandlers,
   drugOrderSearchDefinitionKey: string,
 ) {
-  const { label, criteria } = definition;
+  const { criteria } = definition;
   const names = await fetchDisplayNames(definition);
   onDefinition(definition, names);
   // 1-based history positions of the entries this link added. Searches run meanwhile from the tabs are not included.
@@ -147,16 +162,14 @@ async function runDefinition(
   };
 
   try {
-    for (const criterion of criteria) {
-      const search = buildSearch(criterion, names, drugOrderSearchDefinitionKey);
-      // A single criterion is the whole result, so it carries the label; otherwise the composition does.
-      await runAndRecord({ ...search, description: criteria.length === 1 && label ? label : search.description });
+    const searches = criteria.map((criterion) => buildSearch(criterion, names, drugOrderSearchDefinitionKey));
+    for (const search of searches) {
+      await runAndRecord(search);
     }
-    if (criteria.length >= 2) {
-      const composition = addedEntries.join(' AND ');
+    if (searches.length >= 2) {
       await runAndRecord({
-        searchParams: createCompositionQuery(composition),
-        description: label || `Composition of ${composition}`,
+        searchParams: createCompositionQuery(addedEntries.join(' AND ')),
+        description: describeSearches(searches),
       });
     }
   } catch (error) {

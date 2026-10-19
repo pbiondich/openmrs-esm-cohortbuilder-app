@@ -22,7 +22,7 @@ Links can open the builder with a search already run. The page reads one of thes
 
 | Parameter | What it does |
 | --- | --- |
-| `?definition=<base64url JSON>` | Runs each criterion as a search, then (for 2 or more) a composition that ANDs them |
+| `?definition=<base64url JSON>` | Runs each criterion as a search, then (for 2 or more) a composition that ANDs them. Each history entry is described in the builder's own words, as its search tab would describe it |
 | `?cohort=<uuid>` | Shows the members of a saved cohort (the first 200 active members; a note says when there are more, or when some could not be loaded). It is not added to the search history. |
 | `?query=<uuid>` | Runs a saved query |
 
@@ -39,20 +39,22 @@ A `definition` link also fills in the Demographics, Enrollments and Drug Order t
   "criteria": [
     { "type": "demographics", "gender": "female", "minAge": 15, "maxAge": 49 },
     { "type": "enrollment", "programs": ["<program uuid>"], "enrolledOnOrAfter": "2024-01-01" },
-    { "type": "drugOrder", "drugs": ["<drug uuid>"], "activeOnOrAfter": "today" }
+    { "type": "drugOrder", "drugs": ["<drug uuid>"], "activeOnOrAfter": "today" },
+    { "type": "encounter", "encounterTypes": ["<encounter type uuid>"] }
   ]
 }
 ```
 
-- `v` must be `1`. `label` is optional text (up to 200 characters) shown as the description of the final search history entry.
+- `v` must be `1`. `label` is optional text (up to 200 characters). It is accepted for links made before, and never shown: the history describes what was searched in the builder's own words, so a link can't call one population another.
 - `criteria` has 1 to 5 items, ANDed together:
   - `demographics`: `gender` is `"male"`, `"female"` or `"any"` (the default); `minAge` is a whole number from 0 to 150 and `maxAge` from 1 to 150, with `minAge` not above `maxAge`. Give at least a gender other than `"any"`, `minAge` or `maxAge`. Only living patients are found, as in the Demographics tab.
   - `enrollment`: `programs` lists 1 to 10 program uuids; optional `enrolledOnOrAfter` and `enrolledOnOrBefore` are `YYYY-MM-DD` dates.
   - `drugOrder`: `drugs` lists 1 to 50 drug (`org.openmrs.Drug`, not concept) uuids; optional `activeOnOrAfter` and `activeOnOrBefore` are `YYYY-MM-DD` dates or `"today"`, which is worked out when the link is opened, so shared links stay relative.
+  - `encounter`: `encounterTypes` lists 1 to 10 encounter type uuids. It finds patients with at least one encounter of any of them, at any time and place, as the Encounters tab does with only types chosen.
 - Uuids are standard uuids or 36-character ids such as CIEL's `1065AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`.
 - The encoded definition is [base64url](https://www.rfc-editor.org/rfc/rfc4648#section-5) of UTF-8 JSON, with or without `=` padding, and at most 4096 bytes once decoded.
 
-Anything else (unknown keys, wrong types, out-of-range values, bad base64url, too large) rejects the whole link: an error notification explains why, nothing is run, and the builder works as usual. If a linked saved cohort or query cannot be loaded, the same notification says so. If one of the searches fails on the server, the entries the link added are removed from the search history (searches you ran meanwhile stay) and the notification says which search failed.
+Anything else (unknown keys, wrong types, out-of-range values, bad base64url, too large) rejects the whole link: an error notification says "This link isn't a valid cohort query", nothing is run, and the builder works as usual. It never says which part was wrong, since that could quote the link, and anyone can write a link. Each criterion becomes a search through its tab's own query builder; nothing from the link reaches the server except validated uuids, ages and dates. If a linked saved cohort or query cannot be loaded, the same notification says so. If one of the searches fails on the server, the entries the link added are removed from the search history (searches you ran meanwhile stay) and the notification says which search failed.
 
 To make a link, encode the JSON with either of these one-liners and append it to `/openmrs/spa/cohort-builder?definition=`:
 
