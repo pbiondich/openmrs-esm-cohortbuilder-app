@@ -6,6 +6,7 @@ import { type ConfigObject } from '../../config-schema';
 import { type CohortDefinition, definitionSearch, type TestDetails } from '../../url-definition/url-definition';
 import { definitionUrl } from '../cohort-builder-links';
 import { useCohortCount } from '../cohort-count.resource';
+import { completionsFor } from '../completions';
 import { type OmnibarProviderProps } from '../omnibar-contract';
 import {
   type CohortCriteriaConfig,
@@ -97,6 +98,19 @@ const CohortCountProvider: React.FC<OmnibarProviderProps> = (props) => {
   const onLanded = useCallback(() => setLookupsLanded((landed) => landed + 1), []);
   useTestLookup(pending, lookingUp, locale, onLanded);
 
+  // What the user can take with Tab: the test or program being typed, never before the row may answer.
+  const completions = useMemo(
+    () =>
+      allowed
+        ? completionsFor(query, { ...criteriaConfig, tests }, (words) =>
+            lookingUp ? knownTests(words, locale) : undefined,
+          )
+        : [],
+    // lookupsLanded: the lookup's answer is read through knownTests.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allowed, lookingUp, query, criteriaConfig, tests, locale, lookupsLanded],
+  );
+
   const offer = useMemo(() => {
     const definition = allowed ? parseCohortCriteria(query, { ...criteriaConfig, tests }) : null;
     const to = definition ? definitionUrl(definition) : null;
@@ -125,7 +139,7 @@ const CohortCountProvider: React.FC<OmnibarProviderProps> = (props) => {
   useEffect(() => {
     const title = t('omnibarCohortCount', 'Patient count');
     if (!offer) {
-      report({ query, title, status: 'idle' });
+      report({ query, title, status: 'idle', ...(completions.length && { completions }) });
       return;
     }
     if (error) {
@@ -154,7 +168,7 @@ const CohortCountProvider: React.FC<OmnibarProviderProps> = (props) => {
         },
       ],
     });
-  }, [query, offer, count, loading, error, unavailable, context.locale, report, t]);
+  }, [query, offer, completions, count, loading, error, unavailable, context.locale, report, t]);
 
   return null;
 };

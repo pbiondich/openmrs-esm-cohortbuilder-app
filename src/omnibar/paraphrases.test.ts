@@ -723,6 +723,9 @@ describe('test results', () => {
     ['women with vir', 'vir'],
     ['latest vir', 'vir'],
     ['patients with lowest cd', 'cd'],
+    // A program being typed is completed from the known programs, never looked up as a test.
+    ['women enrolled in hi', null],
+    ['women in the tub', null],
     ['viral load', null],
     ['patients with viral load since', null],
     ['vl > 1000', 'vl'],

@@ -632,6 +632,10 @@ function unreadSpan(
   // A result word that came before the name ("latest vir") is the user's, not the name's.
   const resultWord = longestOf(tokens, read.unreadAt, testResults, P);
   const start = resultWord?.next ?? read.unreadAt;
+  // "enrolled in tub", "in the tub": a program being typed, never a test's name to look up.
+  if (!resultWord && [P.enrolled, P.programLinkers].some((list) => matchPhrase(tokens, start, list) !== null)) {
+    return null;
+  }
   let end = start;
   while (
     end < tokens.length &&
