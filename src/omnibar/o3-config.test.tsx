@@ -13,8 +13,9 @@ import {
 } from '@openmrs/esm-config';
 import { registerExtensionRendering, unregisterExtensionRendering } from '@openmrs/esm-extensions';
 import { ComponentContext, useConfig as realUseConfig } from '@openmrs/esm-react-utils';
-import { configSchema } from '../config-schema';
+import { type ConfigObject, configSchema } from '../config-schema';
 import { OMNIBAR_CONTRACT_VERSION, type OmnibarReport } from './omnibar-contract';
+import { cohortCriteriaConfig, parseCohortCriteria } from './parse-cohort-criteria';
 import CohortCountProvider from './providers/cohort-count.provider';
 
 // The providers import useConfig from the framework, which tests alias to its mock. Here it is the real
@@ -125,5 +126,40 @@ describe("o3's config for the cohort row, through the real config system", () =>
       status: 'loading',
       results: [{ title: 'Counting…', subtitle: expect.stringMatching(/^Patients who taking 13 drugs on or after /) }],
     });
+  });
+});
+
+describe('omnibar.phrases through the real config system', () => {
+  const configFrom = (provided: object) => {
+    provide({ [moduleName]: provided }, '/openmrs/spa/custom/config.json');
+    registerModuleWithConfigSystem(moduleName);
+    defineConfigSchema(moduleName, configSchema);
+    registerModuleLoad(moduleName);
+    registerExtensionRendering({
+      renderingId: 'o3-rendering',
+      extensionName: extensionId,
+      extensionModuleName: moduleName,
+      extensionId,
+      slotName,
+      slotModuleName: '@openmrs/esm-omnibar-app',
+    });
+    return extensionConfig() as ConfigObject;
+  };
+  const under30 = [{ type: 'demographics', gender: 'any', maxAge: 29 }];
+  const phraseErrors = () => consoleError.mock.calls.flat().filter((message) => /phrases/.test(String(message)));
+
+  it('gives every list its empty default when unset, so the shipped table reads alone', () => {
+    const config = configFrom({});
+    expect(config.omnibar.phrases).toMatchObject({ under: [], stopwords: [], ageGroups: [] });
+    expect(parseCohortCriteria('patients under 30', cohortCriteriaConfig(config))?.criteria).toEqual(under30);
+    expect(phraseErrors()).toEqual([]);
+  });
+
+  it("adds a site's phrases when set, keeping the other lists' defaults", () => {
+    const config = configFrom({ omnibar: { phrases: { under: ['younger then'] } } });
+    expect(config.omnibar.phrases).toMatchObject({ under: ['younger then'], stopwords: [] });
+    expect(parseCohortCriteria('patients younger then 30', cohortCriteriaConfig(config))?.criteria).toEqual(under30);
+    expect(parseCohortCriteria('patients under 30', cohortCriteriaConfig(config))?.criteria).toEqual(under30);
+    expect(phraseErrors()).toEqual([]);
   });
 });

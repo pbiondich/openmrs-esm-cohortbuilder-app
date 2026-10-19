@@ -93,7 +93,6 @@ describe('parseCohortCriteria', () => {
     ['men over 50 in TB program taking ARVs', [demographics('male', 51), enrollment(tb), arvs]],
     ['enrolled in HIV and TB programs', [enrollment(hiv), enrollment(tb)]],
     ['on ARVs and on TLD', [arvs, drugOrder(tldDrug)]],
-    ['Women, over 50.', [demographics('female', 51)]],
     ['female patients aged 15–49 on ARVs?', [demographics('female', 15, 49), arvs]],
     ['find patients who are women over 50', [demographics('female', 51)]],
     ['build cohort of men in HIV program', [demographics('male'), enrollment(hiv)]],
@@ -114,6 +113,7 @@ describe('parseCohortCriteria', () => {
     ['a name', 'Mary Achieng'],
     ['either gender', 'women or men'],
     ['both genders', 'women and men'],
+    ['an age right after a comma after a gender', 'Women, over 50.'],
     ['a negation', 'women not on ARVs'],
     ['a bare "in" with a program', 'in HIV'],
     ['an unknown program', 'in malaria program'],
@@ -134,9 +134,8 @@ describe('parseCohortCriteria', () => {
     ['a lone 0 and over', '0 and over'],
     ['a reversed range', 'aged 50-20'],
     ['two lower bounds', 'over 18 over 21'],
-    ['a number in words', 'women over fifty'],
     ['a dangling verb', 'women on'],
-    ['a word we do not guess', 'children'],
+    ['a word we do not guess', 'villagers'],
     ['a character we never parse', 'women café'],
     ['a concept lookup', 'cd4 count'],
   ])('rejects %s: %j', (_label, text) => {
@@ -317,6 +316,7 @@ describe('parseCohortCriteria', () => {
         programs: config.omnibar.programs,
         drugGroups: config.omnibar.drugGroups,
         encounterTypes: config.omnibar.encounterTypes,
+        phrases: expect.objectContaining({ numbers: expect.any(Map) }),
       });
     });
 
