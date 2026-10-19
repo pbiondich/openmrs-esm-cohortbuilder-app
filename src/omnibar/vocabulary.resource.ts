@@ -8,8 +8,8 @@ import { isPlainObject } from './saved-search.resource';
 /**
  * The programs and encounter types the server has, so the cohort parser knows them by name with no
  * config: a program by its name, its concept's names in the user's language and in English (CIEL
- * gives most programs several), and each of those without a trailing "program" or "clinic"; an
- * encounter type by its name. Asked for once per user and language, when the bar first mounts the
+ * gives most programs several), and each of those without a trailing program word (any of the
+ * table's `programNouns`: "program", "clinic", "service" and the rest); an encounter type by its name. Asked for once per user and language, when the bar first mounts the
  * count row, never per keystroke; the parser itself still makes no request.
  *
  * Limits: the first 100 of each (REST pages), and a concept's voided names too, since REST doesn't
