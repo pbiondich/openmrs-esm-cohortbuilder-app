@@ -581,6 +581,49 @@ function readClauses(
  * when the text reads, or the words can't be a test's name.
  */
 export function unreadWords(text: string, config: CohortCriteriaConfig): string | null {
+  const span = unreadSpan(text, config);
+  return span && (span.compared || span.beingTyped) ? span.words : null;
+}
+
+/**
+ * The test name being typed at the end of the text, after a criterion or a result word ("vir" in
+ * "women with vir"), which completions may finish. Never words after stopwords alone.
+ */
+export function typedTestWords(text: string, config: CohortCriteriaConfig): string | null {
+  const span = unreadSpan(text, config);
+  return span?.beingTyped ? span.words : null;
+}
+
+/**
+ * The words after "enrolled", "in", "the" or another program word at the end of text that doesn't
+ * read yet, which could be the start of a program's name ("tub" in "enrolled in tub"), longest
+ * first, at most four words each.
+ */
+export function typedProgramWords(text: string, config: CohortCriteriaConfig): Array<string> {
+  const P = config.phrases ?? compilePhrases();
+  const tokens = tokenize(text);
+  if (!tokens?.length || parseCohortCriteria(text, config)) return [];
+  const tails: Array<string> = [];
+  for (let start = Math.max(1, tokens.length - 4); start < tokens.length; start++) {
+    const afterProgramWord = [P.enrolled, P.programLinkers].some((list) =>
+      list.some(
+        (phrase) =>
+          start - phrase.length >= 0 && phrase.every((word, offset) => tokens[start - phrase.length + offset] === word),
+      ),
+    );
+    const words = tokens.slice(start);
+    if (afterProgramWord && words.every((word) => /^[\p{L}\p{N}]+$/u.test(word))) {
+      tails.push(words.join(' '));
+    }
+  }
+  return tails;
+}
+
+/** The words that stopped the parser, and whether a comparison follows them or they are being typed. */
+function unreadSpan(
+  text: string,
+  config: CohortCriteriaConfig,
+): { words: string; compared: boolean; beingTyped: boolean } | null {
   const P = config.phrases ?? compilePhrases();
   const tokens = tokenize(text);
   if (!tokens?.length) return null;
@@ -606,16 +649,14 @@ export function unreadWords(text: string, config: CohortCriteriaConfig): string 
   // "patients with Mary Achieng" never sends a patient's name to concept search.
   const compared = end < tokens.length && Boolean(longestOf(tokens, end, testComparisons, P));
   const beingTyped = end === tokens.length && (read.matched > 0 || resultWord !== null);
-  if (!compared && !beingTyped) return null;
   // Put back what the tokenizer split: "cd4", not "cd 4", when that is how it was typed.
   const typed = text.normalize('NFKC').toLowerCase();
-  return words.reduce((joined, word) => {
-    if (!joined) return word;
-    const last = joined.split(' ').at(-1);
-    return typed.includes(`${last}${word}`) && !typed.includes(`${last} ${word}`)
-      ? `${joined}${word}`
-      : `${joined} ${word}`;
+  const joined = words.reduce((so, word) => {
+    if (!so) return word;
+    const last = so.split(' ').at(-1);
+    return typed.includes(`${last}${word}`) && !typed.includes(`${last} ${word}`) ? `${so}${word}` : `${so} ${word}`;
   }, '');
+  return { words: joined, compared, beingTyped };
 }
 
 export function parseCohortCriteria(text: string, config: CohortCriteriaConfig): CohortDefinition | null {
