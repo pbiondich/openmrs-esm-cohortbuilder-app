@@ -465,6 +465,24 @@ describe("a site's own phrases", () => {
     expect(parseCohortCriteria(text, { ...config, phrases })).toBeNull();
   });
 
+  it.each([
+    "isn't",
+    'isnt',
+    "don't",
+    "doesn't",
+    "aren't",
+    "wasn't",
+    "can't",
+    'cannot',
+    "won't",
+    "ain't",
+    'excl',
+    'neither',
+  ])('ignores an added program linker %j, a negation once its apostrophe is gone', (word) => {
+    const phrases = compilePhrases(undefined, { programLinkers: [word] });
+    expect(parseCohortCriteria(`patients ${word} HIV program`, { ...config, phrases })).toBeNull();
+  });
+
   it('ignores an added age group named with a negation', () => {
     const phrases = compilePhrases(undefined, { ageGroups: [{ phrases: ['not adults'], maxAge: 17 }] });
     expect(parseCohortCriteria('not adults', { ...config, phrases })).toBeNull();
