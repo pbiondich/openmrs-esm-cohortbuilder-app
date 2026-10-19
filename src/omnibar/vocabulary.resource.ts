@@ -24,6 +24,8 @@ export interface ServerVocabulary {
 const empty: ServerVocabulary = { programs: [], encounterTypes: [] };
 const maxEntries = 100;
 const programsUrl = `${restBaseUrl}/program?v=custom:(uuid,name,retired,concept:(names:(name,locale)))&limit=${maxEntries}`;
+// One program whose concept can't be read fails the whole list (o3's MDR-TB Program does), so names alone then.
+const programNamesUrl = `${restBaseUrl}/program?v=custom:(uuid,name,retired)&limit=${maxEntries}`;
 const encounterTypesUrl = `${restBaseUrl}/encountertype?v=custom:(uuid,name,retired)&limit=${maxEntries}`;
 const maxNameLength = 120;
 
@@ -114,7 +116,7 @@ export function mergeVocabulary(
 
 const currentUser = (): string | undefined => getSessionStore().getState().session?.user?.uuid;
 
-let cached: { key: string; value?: ServerVocabulary; promise?: Promise<ServerVocabulary> } | null = null;
+let cached: { key: string; read: Partial<ServerVocabulary>; asking?: Promise<Partial<ServerVocabulary>> } | null = null;
 // Set once for the page's life: the subscription outlives forgetServerVocabulary, which resets only `cached`.
 let following = false;
 
@@ -137,7 +139,7 @@ function followSession() {
 
 /** For tests: whether a vocabulary is kept. */
 export function hasServerVocabulary(): boolean {
-  return Boolean(cached?.value);
+  return Boolean(cached?.read.programs || cached?.read.encounterTypes);
 }
 
 /** For tests: forget what was fetched. */
@@ -145,56 +147,56 @@ export function forgetServerVocabulary() {
   cached = null;
 }
 
-async function fetchVocabulary(locale: string): Promise<ServerVocabulary> {
+/** Asks for the lists not read yet. One that fails is left out, to be asked for again next time. */
+async function readVocabulary(locale: string, read: Partial<ServerVocabulary>): Promise<Partial<ServerVocabulary>> {
   const [programs, encounterTypes] = await Promise.allSettled([
-    openmrsFetch<unknown>(programsUrl),
-    openmrsFetch<unknown>(encounterTypesUrl),
+    read.programs ??
+      openmrsFetch<unknown>(programsUrl)
+        .catch(() => openmrsFetch<unknown>(programNamesUrl))
+        .then(({ data }) => toServerVocabulary(data, null, locale).programs),
+    read.encounterTypes ??
+      openmrsFetch<unknown>(encounterTypesUrl).then(
+        ({ data }) => toServerVocabulary(null, data, locale).encounterTypes,
+      ),
   ]);
-  if (programs.status === 'rejected' && encounterTypes.status === 'rejected') {
-    throw new Error('No vocabulary');
-  }
-  return toServerVocabulary(
-    programs.status === 'fulfilled' ? programs.value.data : null,
-    encounterTypes.status === 'fulfilled' ? encounterTypes.value.data : null,
-    locale,
-  );
+  return {
+    ...(programs.status === 'fulfilled' && { programs: programs.value }),
+    ...(encounterTypes.status === 'fulfilled' && { encounterTypes: encounterTypes.value }),
+  };
 }
+
+const isComplete = (read: Partial<ServerVocabulary> | undefined): read is ServerVocabulary =>
+  Boolean(read?.programs && read.encounterTypes);
 
 /**
  * The server's programs and encounter types for the logged-in user, or null until they arrive or
- * while `enabled` is false. When neither can be read the answer is empty, quietly, and the next mount
- * asks again; one that can be read is kept for the session.
+ * while `enabled` is false. A list that can't be read is empty, quietly, and the next mount asks for it
+ * again; a list that was read is kept for the session.
  */
 export function useServerVocabulary(enabled: boolean, locale: string): ServerVocabulary | null {
   const key = `${currentUser() ?? ''} ${locale}`;
   const [state, setState] = useState<{ key: string; value: ServerVocabulary } | null>(() =>
-    enabled && cached?.key === key && cached.value ? { key, value: cached.value } : null,
+    enabled && cached?.key === key && isComplete(cached.read) ? { key, value: cached.read } : null,
   );
 
   useEffect(() => {
     if (!enabled) return;
     followSession();
-    if (cached?.key === key && cached.value) {
-      setState({ key, value: cached.value });
+    if (cached?.key !== key) cached = { key, read: {} };
+    const entry = cached;
+    if (isComplete(entry.read)) {
+      setState({ key, value: entry.read });
       return;
     }
-    if (cached?.key !== key || !cached.promise) {
-      const entry: typeof cached = { key, promise: fetchVocabulary(locale) };
-      cached = entry;
-      entry.promise.then(
-        (value) => {
-          if (cached === entry) cached = { key, value };
-        },
-        () => {
-          if (cached === entry) cached = null;
-        },
-      );
+    if (!entry.asking) {
+      entry.asking = readVocabulary(locale, entry.read).then((read) => {
+        entry.read = read;
+        entry.asking = undefined;
+        return read;
+      });
     }
     let live = true;
-    cached.promise.then(
-      (value) => live && setState({ key, value }),
-      () => live && setState({ key, value: empty }),
-    );
+    entry.asking.then((read) => live && setState({ key, value: { ...empty, ...read } }));
     return () => {
       live = false;
     };
