@@ -661,6 +661,8 @@ describe('test results', () => {
     ['VL > 1000 in the last 6 months', [result(viralLoad, 'gt', 1000, { withinLastMonths: 6 })]],
     ['viral load over 1000 within the past 2 weeks', [result(viralLoad, 'gt', 1000, { withinLastDays: 14 })]],
     ['viral load over 1000 in the last 90 days', [result(viralLoad, 'gt', 1000, { withinLastDays: 90 })]],
+    ['viral load over 1000 in the last 1000 days', [result(viralLoad, 'gt', 1000, { withinLastDays: 1000 })]],
+    ['viral load over 1000 in the last 3650 days', [result(viralLoad, 'gt', 1000, { withinLastDays: 3650 })]],
     ['viral load over 1000 over the past 2 years', [result(viralLoad, 'gt', 1000, { withinLastMonths: 24 })]],
     ['viral load over 1000 since 2025', [result(viralLoad, 'gt', 1000, { onOrAfter: '2025-01-01' })]],
     ['viral load over 1000 since 2025-03-01', [result(viralLoad, 'gt', 1000, { onOrAfter: '2025-03-01' })]],
@@ -686,6 +688,8 @@ describe('test results', () => {
     // Windows that can't be searched.
     'VL > 1000 in the last 0 months',
     'VL > 1000 in the last 300 months',
+    'VL > 1000 in the last 3651 days',
+    'VL > 1000 in the last 2.5 months',
     'VL > 1000 in the last year',
     'VL > 1000 since 1850',
     'VL > 1000 since 2025-02-30',
@@ -702,6 +706,9 @@ describe('test results', () => {
   it('labels the definition with the result, the comparison and the units', () => {
     expect(parseCohortCriteria('women with lowest CD4 under 200', withTests).label).toBe(
       'Female patients with lowest CD4 count < 200 cells/µL',
+    );
+    expect(parseCohortCriteria('women with CD4 under 200', withTests).label).toBe(
+      'Female patients with most recent CD4 count < 200 cells/µL',
     );
   });
 
