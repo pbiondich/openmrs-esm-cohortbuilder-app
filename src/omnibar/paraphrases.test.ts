@@ -706,7 +706,7 @@ describe('test results', () => {
   });
 
   it.each<[string, string | null]>([
-    ['patients with viral loa', 'viral loa'],
+    ['women with viral loa', 'viral loa'],
     ['women with cd4 under 200', 'cd4'],
     ['women with CD4 count < 200', 'cd4 count'],
     ['patients with viral load over 1000 in the last 6 months', 'viral load'],
@@ -717,6 +717,12 @@ describe('test results', () => {
     ['patients with b c d e f g h over 2', null],
     // Only words that could be a test: followed by a comparison, or being typed after other words.
     ['Mary Achieng', null],
+    // Being typed after stopwords alone isn't enough: a patient's name must never reach concept search.
+    ['patients with Mary Achieng', null],
+    ['how many patients have Mary Achieng', null],
+    ['women with vir', 'vir'],
+    ['latest vir', 'vir'],
+    ['patients with lowest cd', 'cd'],
     ['viral load', null],
     ['patients with viral load since', null],
     ['vl > 1000', 'vl'],
