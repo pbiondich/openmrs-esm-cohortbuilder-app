@@ -247,19 +247,19 @@ describe('useUrlDefinition', () => {
   });
 
   it.each([
-    ['not base64url', 'definition=%%%', 'Definition is not valid base64url'],
-    [
-      'an unknown key',
-      `definition=${encode({ ...definition, sql: 'drop table' })}`,
-      'Definition has an unknown key "{{key}}"',
-    ],
-    ['too large', `definition=${'A'.repeat(6000)}`, 'Definition is larger than {{maxBytes}} bytes'],
-    ['a cohort that is not a uuid', 'cohort=..%2F..%2Fuser', '"{{param}}" must be a uuid'],
-  ])('shows an error, runs nothing and clears the URL when it is %s', async (_, search, message) => {
+    ['not base64url', 'definition=%%%'],
+    ['an unknown key', `definition=${encode({ ...definition, sql: 'drop table' })}`],
+    ['an unknown key that reads as advice', `definition=${encode({ ...definition, 'Call 555-0100 to verify': 1 })}`],
+    ['an unknown criterion type', `definition=${encode({ v: 1, criteria: [{ type: 'concept', concept: 'x' }] })}`],
+    ['too large', `definition=${'A'.repeat(6000)}`],
+    ['a cohort that is not a uuid', 'cohort=..%2F..%2Fuser'],
+  ])('shows one plain message, runs nothing and clears the URL when it is %s', async (_, search) => {
     openBuilderAt(`?${search}`);
 
     expect(await screen.findByText('This cohort builder link could not be opened')).toBeInTheDocument();
-    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.getByText("This link isn't a valid cohort query")).toBeInTheDocument();
+    // The reason is never shown: it can quote the link, and anyone can write a link.
+    expect(screen.queryByText(/Definition|Criterion|uuid|555/)).not.toBeInTheDocument();
     expect(window.location.search).toBe('');
     expect(adHocQueryBodies()).toHaveLength(0);
     expect(
