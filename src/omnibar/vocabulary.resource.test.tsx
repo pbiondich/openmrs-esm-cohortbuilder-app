@@ -78,7 +78,7 @@ describe('the server vocabulary', () => {
     getSessionStore().setState({ loaded: false, session: null });
   });
 
-  it('reads programs with their concept names in the user language and English, and encounter types', () => {
+  it('reads programs with every name their concept has, in any language, and encounter types', () => {
     const vocabulary = toServerVocabulary(programs, encounterTypes, 'fr_FR');
     expect(vocabulary.programs).toEqual([
       {
@@ -89,6 +89,7 @@ describe('the server vocabulary', () => {
           'Tuberculosis treatment program',
           'Tuberculosis treatment',
           'Programme de traitement de la tuberculose',
+          'Programu ya kifua kikuu',
         ],
       },
       { uuid: mch, label: 'Maternal and Child Health Programme', aliases: ['Maternal and Child Health'] },
