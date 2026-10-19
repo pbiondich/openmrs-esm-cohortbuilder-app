@@ -13,12 +13,21 @@ import {
   MAX_DRUGS,
   MAX_LABEL_LENGTH,
 } from '../url-definition/url-definition';
+import {
+  type CompiledPhrases,
+  compilePhrases,
+  matchPhrase,
+  type PhraseAdditions,
+  tokenize,
+} from './phrases/phrase-table';
 
 /**
- * Turns plain English like "women aged 15-49 on ARVs" into a cohort builder definition, from config
- * alone. Every word must be understood or be a stopword; anything else returns null, so the omnibar
- * never shows a cohort that is a guess at what was typed. No network, no model. The limits and the
- * uuid check are the decoder's own, in url-definition.ts.
+ * Turns plain English like "how many women aged 15-49 on ARVs?" into a cohort builder definition.
+ * Every word must be understood or be a stopword; anything else returns null, so the omnibar never
+ * shows a cohort that is a guess at what was typed. No network, no model. The words are data, in
+ * `phrases/en.json` plus a site's `omnibar.phrases`; the names are programs, drug groups and
+ * encounter types from config and, in the omnibar, from the server. The limits and the uuid check are
+ * the decoder's own, in url-definition.ts.
  */
 
 export interface CohortCriteriaConfig {
@@ -28,6 +37,8 @@ export interface CohortCriteriaConfig {
   drugGroups: Array<CohortDrugGroup>;
   /** Encounter types read as "<alias> encounter". None configured, none understood. */
   encounterTypes?: Array<CohortEncounterType>;
+  /** The phrase table to read with. The shipped English one when not given. */
+  phrases?: CompiledPhrases;
 }
 
 /** drugCriteriaEnabled says what the server can run, so it sits at the top of the config. */
@@ -37,76 +48,15 @@ export function cohortCriteriaConfig(config: ConfigObject): CohortCriteriaConfig
     programs: config.omnibar.programs,
     drugGroups: config.omnibar.drugGroups,
     encounterTypes: config.omnibar.encounterTypes,
+    phrases: compilePhrases(undefined, (config.omnibar.phrases ?? undefined) as PhraseAdditions | undefined),
   };
 }
 
-const STOPWORDS = new Set([
-  'a',
-  'all',
-  'an',
-  'and',
-  'are',
-  'build',
-  'cohort',
-  'count',
-  'currently',
-  'everyone',
-  'find',
-  'for',
-  'get',
-  'had',
-  'has',
-  'have',
-  'having',
-  'how',
-  'is',
-  'list',
-  'many',
-  'me',
-  'number',
-  'of',
-  'patient',
-  'patients',
-  'people',
-  'person',
-  'persons',
-  'search',
-  'show',
-  'that',
-  'the',
-  'there',
-  'those',
-  'total',
-  'were',
-  'what',
-  'who',
-  'whose',
-  'with',
-]);
-
-const GENDERS: Record<string, 'male' | 'female'> = {
-  female: 'female',
-  females: 'female',
-  girl: 'female',
-  girls: 'female',
-  woman: 'female',
-  women: 'female',
-  male: 'male',
-  males: 'male',
-  boy: 'male',
-  boys: 'male',
-  man: 'male',
-  men: 'male',
-};
-
-const ENROLLED_WORDS = new Set(['enrolled', 'enroled', 'enrollment', 'enrolment']);
-const PROGRAM_WORDS = new Set(['program', 'programs', 'programme', 'programmes']);
-const DRUG_VERBS = new Set(['on', 'taking', 'receiving']);
-const ENCOUNTER_WORDS = new Set(['encounter', 'encounters']);
+type Gender = 'male' | 'female';
 
 type Clause =
-  | { kind: 'gender'; gender: 'male' | 'female' }
-  | { kind: 'age'; minAge?: number; maxAge?: number }
+  | { kind: 'gender'; gender: Gender }
+  | { kind: 'age'; minAge?: number; maxAge?: number; gender?: Gender; group?: boolean }
   | { kind: 'program'; program: CohortProgram }
   | { kind: 'drugGroup'; group: CohortDrugGroup }
   | { kind: 'encounter'; encounterType: CohortEncounterType };
@@ -116,107 +66,242 @@ interface Match {
   clause: Clause;
 }
 
-/** Lower case, dashes and plus signs as their own tokens, and null for characters we never parse. */
-function tokenize(text: string): Array<string> | null {
-  const normalized = text
-    .toLowerCase()
-    .replace(/[–—]/g, '-')
-    .replace(/[,.;:!?]/g, ' ')
-    .replace(/([+-])/g, ' $1 ');
-  if (!/^[a-z0-9+\s-]*$/.test(normalized)) {
-    return null;
-  }
-  return normalized.split(/\s+/).filter(Boolean);
+interface AgeReading {
+  next: number;
+  minAge?: number;
+  maxAge?: number;
+  gender?: Gender;
+  /** A named group, such as "adolescents", whose band bounds written as numbers narrow. */
+  group?: boolean;
 }
 
-const N = '(\\d{1,3})';
-const YEARS = '(?: (?:years?|yrs?)(?: old)?)?';
-const AGE_PREFIX = '(?:(?:aged|age|ages) )?';
-
-/** Tried in order at each position; each returns the bounds, inclusive, for its captured numbers. */
-const AGE_PATTERNS: Array<{ pattern: RegExp; bounds: (a: number, b: number) => { minAge?: number; maxAge?: number } }> =
-  [
-    { pattern: `between ${N}${YEARS} and ${N}${YEARS}`, bounds: (a, b) => ({ minAge: a, maxAge: b }) },
-    { pattern: `${N}${YEARS} (?:-|to) ${N}${YEARS}`, bounds: (a, b) => ({ minAge: a, maxAge: b }) },
-    { pattern: `(?:over|above|older than|more than) ${N}${YEARS}`, bounds: (a) => ({ minAge: a + 1 }) },
-    { pattern: `(?:under|below|younger than|less than) ${N}${YEARS}`, bounds: (a) => ({ maxAge: a - 1 }) },
-    { pattern: `at least ${N}${YEARS}`, bounds: (a) => ({ minAge: a }) },
-    { pattern: `at most ${N}${YEARS}`, bounds: (a) => ({ maxAge: a }) },
-    { pattern: `${N}${YEARS} \\+`, bounds: (a) => ({ minAge: a }) },
-    { pattern: `${N}${YEARS} (?:and|or) (?:over|older|above)`, bounds: (a) => ({ minAge: a }) },
-    { pattern: `${N}${YEARS} (?:and|or) (?:under|younger|below)`, bounds: (a) => ({ maxAge: a }) },
-    { pattern: `${N} (?:years?|yrs?) old`, bounds: (a) => ({ minAge: a, maxAge: a }) },
-  ].map(({ pattern, bounds }) => ({ pattern: new RegExp(`^${AGE_PREFIX}${pattern}(?= |$)`), bounds }));
-
-const EXACT_AGE = new RegExp(`^(?:aged|age) ${N}${YEARS}(?= |$)`);
-
-function matchAge(tokens: Array<string>, start: number): Match | null {
-  const rest = tokens.slice(start).join(' ');
-  for (const { pattern, bounds } of AGE_PATTERNS) {
-    const match = pattern.exec(rest);
-    if (match) {
-      const clause = { kind: 'age' as const, ...bounds(Number(match[1]), Number(match[2])) };
-      return { next: start + match[0].split(' ').length, clause };
+/** A whole number of up to three digits, or in words: "nine", "nineteen", "forty", "forty nine", "forty-nine". */
+function readNumber(tokens: Array<string>, start: number, P: CompiledPhrases): { value: number; next: number } | null {
+  const token = tokens[start];
+  if (/^\d{1,3}$/.test(token ?? '')) {
+    return { value: Number(token), next: start + 1 };
+  }
+  const value = P.numbers.get(token);
+  if (value === undefined) return null;
+  if (value >= 20 && value % 10 === 0) {
+    const hyphen = tokens[start + 1] === '-' ? 1 : 0;
+    const units = P.numbers.get(tokens[start + 1 + hyphen]);
+    if (units !== undefined && units >= 1 && units <= 9) {
+      return { value: value + units, next: start + 2 + hyphen };
     }
   }
-  const exact = EXACT_AGE.exec(rest);
-  if (exact) {
-    const age = Number(exact[1]);
-    return { next: start + exact[0].split(' ').length, clause: { kind: 'age', minAge: age, maxAge: age } };
+  return { value, next: start + 1 };
+}
+
+/**
+ * A number of years: the number, then perhaps a unit. Months count only in whole years ("24 months"
+ * is 2), since the builder searches ages in years; any other unit makes it unreadable. `old` says the
+ * unit names an age by itself ("30 years old").
+ */
+function readYears(
+  tokens: Array<string>,
+  start: number,
+  P: CompiledPhrases,
+): { years: number; next: number; old: boolean } | null {
+  const number = readNumber(tokens, start, P);
+  if (!number) return null;
+  const { value, next } = number;
+  const old = matchPhrase(tokens, next, P.yearsOld);
+  const years = matchPhrase(tokens, next, P.years);
+  if (old !== null || years !== null) {
+    const end = Math.max(old ?? 0, years ?? 0);
+    return { years: value, next: end, old: old !== null && old === end };
+  }
+  const months = matchPhrase(tokens, next, P.months);
+  if (months !== null) {
+    return value % 12 === 0 ? { years: value / 12, next: months, old: true } : null;
+  }
+  if (matchPhrase(tokens, next, P.otherUnits) !== null) return null;
+  return { years: value, next, old: false };
+}
+
+const comparators = [
+  ['under', (n: number) => ({ maxAge: n - 1 })],
+  ['atMost', (n: number) => ({ maxAge: n })],
+  ['over', (n: number) => ({ minAge: n + 1 })],
+  ['atLeast', (n: number) => ({ minAge: n })],
+] as const;
+
+/** Every way an age can be written at `start`; the reading that takes the most words wins. */
+function matchAge(tokens: Array<string>, start: number, P: CompiledPhrases): Match | null {
+  const readings: Array<AgeReading> = [];
+  const aged = matchPhrase(tokens, start, P.aged);
+  const from = aged ?? start;
+
+  // "between 15 and 49", "15-49", "from 15 to 49 years", "aged 15 through 49"
+  const rangeStart = matchPhrase(tokens, from, P.rangeFrom);
+  const first = readYears(tokens, rangeStart ?? from, P);
+  if (first) {
+    const join =
+      matchPhrase(tokens, first.next, P.rangeTo) ??
+      (rangeStart !== null && tokens[first.next] === 'and' ? first.next + 1 : null);
+    const second = join !== null ? readYears(tokens, join, P) : null;
+    if (second) readings.push({ next: second.next, minAge: first.years, maxAge: second.years });
+  }
+
+  // "under 30", "at least 18", "> 65", "over the age of 50"
+  for (const [list, bounds] of comparators) {
+    const comparator = matchPhrase(tokens, from, P[list]);
+    const years = comparator !== null ? readYears(tokens, comparator, P) : null;
+    if (years) readings.push({ next: years.next, ...bounds(years.years) });
+  }
+
+  // "30 or younger", "65+", "18 and over", "30 years old", "aged 30"
+  const years = readYears(tokens, from, P);
+  if (years) {
+    const orUnder = matchPhrase(tokens, years.next, P.orUnder);
+    const orOver = matchPhrase(tokens, years.next, P.orOver);
+    if (orUnder !== null) readings.push({ next: orUnder, maxAge: years.years });
+    if (orOver !== null) readings.push({ next: orOver, minAge: years.years });
+    if (years.old || aged !== null) readings.push({ next: years.next, minAge: years.years, maxAge: years.years });
+  }
+
+  // "adolescents", "under fives", "women of reproductive age"
+  if (aged === null) {
+    const group = P.ageGroups.find(({ tokens: words }) =>
+      words.every((word, offset) => tokens[start + offset] === word),
+    );
+    if (group) {
+      readings.push({
+        next: start + group.tokens.length,
+        minAge: group.minAge,
+        maxAge: group.maxAge,
+        gender: group.gender,
+        group: true,
+      });
+    }
+  }
+
+  const best = readings.reduce<AgeReading | null>(
+    (longest, reading) => (!longest || reading.next > longest.next ? reading : longest),
+    null,
+  );
+  if (!best) return null;
+  const { next, ...bounds } = best;
+  return { next, clause: { kind: 'age', ...bounds } };
+}
+
+function matchGender(tokens: Array<string>, start: number, P: CompiledPhrases): Match | null {
+  const female = matchPhrase(tokens, start, P.female);
+  const male = matchPhrase(tokens, start, P.male);
+  if (female !== null && (male === null || female > male)) {
+    return { next: female, clause: { kind: 'gender', gender: 'female' } };
+  }
+  return male !== null ? { next: male, clause: { kind: 'gender', gender: 'male' } } : null;
+}
+
+/** Whether two different words are one slip apart: a letter added, dropped or changed, or two swapped. */
+export function oneSlipApart(a: string, b: string): boolean {
+  if (a === b || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && a[i] === b[i]) i++;
+  if (a.length === b.length) {
+    return (
+      a.slice(i + 1) === b.slice(i + 1) || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2))
+    );
+  }
+  return a.length > b.length ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1);
+}
+
+/**
+ * A typed word for a word of a name: the same, or, when allowed, one slip away in a word of five
+ * letters or more that isn't a word of the phrase table.
+ */
+function sameWord(typed: string | undefined, word: string, P: CompiledPhrases, slips: boolean): boolean {
+  if (typed === word) return true;
+  return (
+    slips &&
+    typed !== undefined &&
+    typed.length >= 5 &&
+    word.length >= 5 &&
+    /^\p{L}+$/u.test(typed) &&
+    !P.knownWords.has(typed) &&
+    oneSlipApart(typed, word)
+  );
+}
+
+type Named = { label: string; aliases: Array<string> };
+
+/**
+ * The item whose label or alias matches the most words from `start`: exactly if any does, else with
+ * a slip in a long word ("tuberculoses", "diabetis"). Two items reading the same words is ambiguous,
+ * so neither matches.
+ */
+function longestAlias<T extends Named>(
+  tokens: Array<string>,
+  start: number,
+  items: Array<T>,
+  P: CompiledPhrases,
+): { item: T; next: number } | null {
+  for (const slips of [false, true]) {
+    let best: { item: T; next: number } | null = null;
+    let tied = false;
+    for (const item of items) {
+      let length = 0;
+      for (const name of [item.label, ...(item.aliases ?? [])]) {
+        const words = tokenize(name ?? '');
+        if (words?.length && words.every((word, offset) => sameWord(tokens[start + offset], word, P, slips))) {
+          length = Math.max(length, words.length);
+        }
+      }
+      if (!length) continue;
+      const next = start + length;
+      if (!best || next > best.next) {
+        best = { item, next };
+        tied = false;
+      } else if (next === best.next && best.item !== item) {
+        tied = true;
+      }
+    }
+    if (best) return tied ? null : best;
   }
   return null;
 }
 
-function matchGender(tokens: Array<string>, start: number): Match | null {
-  const gender = GENDERS[tokens[start]];
-  return gender ? { next: start + 1, clause: { kind: 'gender', gender } } : null;
-}
-
-/** The configured item whose label or alias matches the most tokens from `start`. */
-function longestAlias<T extends { label: string; aliases: Array<string> }>(
+/** "enrolled in HIV", "in the TB program", "HIV programme", "TB clinic". A bare "in HIV" is too vague. */
+function matchProgram(
   tokens: Array<string>,
   start: number,
-  items: Array<T>,
-): { item: T; next: number } | null {
-  let best: { item: T; next: number } | null = null;
-  for (const item of items) {
-    for (const name of [item.label, ...item.aliases]) {
-      const nameTokens = tokenize(name ?? '');
-      if (!nameTokens?.length) continue;
-      const matches = nameTokens.every((token, offset) => tokens[start + offset] === token);
-      const next = start + nameTokens.length;
-      if (matches && (!best || next > best.next)) {
-        best = { item, next };
-      }
-    }
-  }
-  return best;
-}
-
-/** "enrolled in HIV", "in the TB program", "HIV programme". A bare "in HIV" is too vague. */
-function matchProgram(tokens: Array<string>, start: number, programs: Array<CohortProgram>): Match | null {
+  programs: Array<CohortProgram>,
+  P: CompiledPhrases,
+): Match | null {
   let i = start;
-  const enrolled = ENROLLED_WORDS.has(tokens[i]);
-  if (enrolled) i++;
-  if (tokens[i] === 'in') i++;
-  if (tokens[i] === 'the') i++;
-  const hit = longestAlias(tokens, i, programs);
+  const enrolled = matchPhrase(tokens, i, P.enrolled);
+  if (enrolled !== null) i = enrolled;
+  for (let linkers = 0; linkers < 2; linkers++) {
+    const linker = matchPhrase(tokens, i, P.programLinkers);
+    if (linker === null) break;
+    i = linker;
+  }
+  const hit = longestAlias(tokens, i, programs, P);
   if (!hit) return null;
   i = hit.next;
   // The matched name may already end in "program", as a label like "TB Program" does.
-  let named = PROGRAM_WORDS.has(tokens[i - 1]);
-  if (PROGRAM_WORDS.has(tokens[i])) {
+  let named = P.programNouns.some((noun) => noun.length === 1 && noun[0] === tokens[i - 1]);
+  const noun = matchPhrase(tokens, i, P.programNouns);
+  if (noun !== null) {
     named = true;
-    i++;
+    i = noun;
   }
-  if (!enrolled && !named) return null;
+  if (enrolled === null && !named) return null;
   return { next: i, clause: { kind: 'program', program: hit.item } };
 }
 
 /** "on ARVs", "taking antiretrovirals", "receiving TLD". */
-function matchDrugGroup(tokens: Array<string>, start: number, drugGroups: Array<CohortDrugGroup>): Match | null {
-  if (!DRUG_VERBS.has(tokens[start])) return null;
-  const hit = longestAlias(tokens, start + 1, drugGroups);
+function matchDrugGroup(
+  tokens: Array<string>,
+  start: number,
+  drugGroups: Array<CohortDrugGroup>,
+  P: CompiledPhrases,
+): Match | null {
+  const verb = matchPhrase(tokens, start, P.drugVerbs);
+  if (verb === null) return null;
+  const hit = longestAlias(tokens, verb, drugGroups, P);
   return hit ? { next: hit.next, clause: { kind: 'drugGroup', group: hit.item } } : null;
 }
 
@@ -225,10 +310,11 @@ function matchEncounter(
   tokens: Array<string>,
   start: number,
   encounterTypes: Array<CohortEncounterType>,
+  P: CompiledPhrases,
 ): Match | null {
-  const hit = longestAlias(tokens, start, encounterTypes);
-  if (!hit || !ENCOUNTER_WORDS.has(tokens[hit.next])) return null;
-  return { next: hit.next + 1, clause: { kind: 'encounter', encounterType: hit.item } };
+  const hit = longestAlias(tokens, start, encounterTypes, P);
+  const noun = hit ? matchPhrase(tokens, hit.next, P.encounterNouns) : null;
+  return noun !== null ? { next: noun, clause: { kind: 'encounter', encounterType: hit.item } } : null;
 }
 
 function describeAge(minAge?: number, maxAge?: number): string | null {
@@ -242,15 +328,20 @@ const isAge = (value: number | undefined) =>
   value == null || (Number.isInteger(value) && value >= 0 && value <= MAX_AGE);
 
 export function parseCohortCriteria(text: string, config: CohortCriteriaConfig): CohortDefinition | null {
+  const P = config.phrases ?? compilePhrases();
   const tokens = tokenize(text);
   // A cohort needs at least one word: "50+" or "15-49" on their own could be anything.
-  if (!tokens?.some((token) => /[a-z]/.test(token))) {
+  if (!tokens?.some((token) => /\p{L}/u.test(token))) {
     return null;
   }
 
-  let gender: 'male' | 'female' | undefined;
+  let gender: Gender | undefined;
   let minAge: number | undefined;
   let maxAge: number | undefined;
+  // Named groups' bands. Bounds written as numbers narrow them: "children under 5" is under 5.
+  let bandMin = 0;
+  let bandMax = MAX_AGE;
+  let banded = false;
   const programs: Array<CohortProgram> = [];
   const drugGroups: Array<CohortDrugGroup> = [];
   const encounterTypes: Array<CohortEncounterType> = [];
@@ -259,22 +350,34 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
 
   let i = 0;
   while (i < tokens.length) {
-    if (STOPWORDS.has(tokens[i])) {
-      i++;
+    // Criteria before stopwords, so "at least" is read before "at" could be skipped, and the reading
+    // that takes the most words, so "women of reproductive age" is one age group, not "women".
+    const match = [
+      matchGender(tokens, i, P),
+      matchAge(tokens, i, P),
+      matchProgram(tokens, i, config.programs ?? [], P),
+      matchDrugGroup(tokens, i, configuredDrugGroups, P),
+      matchEncounter(tokens, i, config.encounterTypes ?? [], P),
+    ].reduce<Match | null>(
+      (longest, reading) => (reading && (!longest || reading.next > longest.next) ? reading : longest),
+      null,
+    );
+    if (!match) {
+      const stopword = matchPhrase(tokens, i, P.stopwords);
+      if (stopword === null) return null;
+      i = stopword;
       continue;
     }
-    const match =
-      matchGender(tokens, i) ??
-      matchAge(tokens, i) ??
-      matchProgram(tokens, i, config.programs ?? []) ??
-      matchDrugGroup(tokens, i, configuredDrugGroups) ??
-      matchEncounter(tokens, i, config.encounterTypes ?? []);
-    if (!match) return null;
 
     const { clause } = match;
-    if (clause.kind === 'gender') {
+    if (clause.kind === 'gender' || (clause.kind === 'age' && clause.gender)) {
       if (gender && gender !== clause.gender) return null;
       gender = clause.gender;
+    }
+    if (clause.kind === 'age' && clause.group) {
+      banded = true;
+      bandMin = Math.max(bandMin, clause.minAge ?? 0);
+      bandMax = Math.min(bandMax, clause.maxAge ?? MAX_AGE);
     } else if (clause.kind === 'age') {
       if ((clause.minAge != null && minAge != null) || (clause.maxAge != null && maxAge != null)) return null;
       minAge = clause.minAge ?? minAge;
@@ -283,13 +386,23 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
       if (!programs.includes(clause.program)) programs.push(clause.program);
     } else if (clause.kind === 'drugGroup') {
       if (!drugGroups.includes(clause.group)) drugGroups.push(clause.group);
-    } else if (!encounterTypes.includes(clause.encounterType)) {
+    } else if (clause.kind === 'encounter' && !encounterTypes.includes(clause.encounterType)) {
       encounterTypes.push(clause.encounterType);
     }
     i = match.next;
   }
 
-  if (!isAge(minAge) || !isAge(maxAge) || (minAge != null && maxAge != null && minAge > maxAge)) {
+  if (!isAge(minAge) || !isAge(maxAge)) {
+    return null;
+  }
+  if (banded) {
+    // Within the band; a bound outside it, as in "adults under 10", leaves no one, so no cohort.
+    minAge = Math.max(minAge ?? 0, bandMin);
+    maxAge = Math.min(maxAge ?? MAX_AGE, bandMax);
+    if (minAge === 0) minAge = undefined;
+    if (maxAge === MAX_AGE) maxAge = undefined;
+  }
+  if (minAge != null && maxAge != null && minAge > maxAge) {
     return null;
   }
   // The cohort builder reads an age of 0 as "not set", so "under 1" would become everyone alive.

@@ -1,3 +1,4 @@
+import { type PhraseAdditions } from './omnibar/phrases/phrase-table';
 import { Type, validator } from '@openmrs/esm-framework';
 
 // The RefApp demo programs (Initializer configuration/programs). Program uuids are site content, so other
@@ -152,6 +153,49 @@ export const configSchema = {
       },
       _default: COHORT_DRUG_GROUPS_DEFAULT,
     },
+    phrases: {
+      _type: Type.Object,
+      _description:
+        "Phrases this site adds to the cohort parser's English table (src/omnibar/phrases/en.json), list by list: " +
+        'for example "under": ["younger then"] or "stopwords": ["mwili"]. Comparators are named after the FHIR search ' +
+        'prefixes: under (lt), atMost (le), over (gt), atLeast (ge) and aged (eq) come before the number; orUnder (le) ' +
+        'and orOver (ge) after it. A stopword holding "not", "or" or another negation or alternative is ignored, and ' +
+        'so is a phrase longer than 80 characters. ageGroups adds named age bands, such as ' +
+        '{"phrases": ["school age"], "minAge": 6, "maxAge": 12}. Additions only: nothing in the shipped table can be removed.',
+      stopwords: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      female: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      male: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      under: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      atMost: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      over: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      atLeast: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      aged: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      orUnder: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      orOver: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      rangeFrom: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      rangeTo: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      years: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      yearsOld: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      months: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      otherUnits: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      enrolled: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      programLinkers: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      programNouns: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      drugVerbs: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      encounterNouns: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+      ageGroups: {
+        _type: Type.Array,
+        _default: [],
+        _elements: {
+          _type: Type.Object,
+          phrases: { _type: Type.Array, _elements: { _type: Type.String }, _default: [] },
+          minAge: { _type: Type.Number, _description: 'Whole years, 0 to 150.' },
+          maxAge: { _type: Type.Number, _description: 'Whole years, 0 to 150.' },
+          gender: { _type: Type.String, _description: '"female" or "male", or leave it out.' },
+          source: { _type: Type.String, _description: 'Where the bounds come from. Not shown.' },
+        },
+      },
+    },
     encounterTypes: {
       _type: Type.Array,
       _description:
@@ -198,5 +242,6 @@ export interface ConfigObject {
     programs: Array<CohortProgram>;
     drugGroups: Array<CohortDrugGroup>;
     encounterTypes: Array<CohortEncounterType>;
+    phrases?: PhraseAdditions;
   };
 }
