@@ -247,7 +247,7 @@ function namesOf(item: Named): Array<Array<string>> {
 /**
  * The item whose label or alias matches the most words from `start`: exactly if any does, else with
  * a slip in a long word ("tuberculoses", "diabetis"). Two items reading the same words is ambiguous,
- * so neither matches.
+ * so neither matches. A name never takes a word from `never`: "Not HIV Program" can't make "not" a criterion.
  */
 function longestAlias<T extends Named>(
   tokens: Array<string>,
@@ -261,7 +261,10 @@ function longestAlias<T extends Named>(
     for (const item of items) {
       let length = 0;
       for (const words of namesOf(item)) {
-        if (words.every((word, offset) => sameWord(tokens[start + offset], word, P, slips))) {
+        if (
+          words.every((word, offset) => sameWord(tokens[start + offset], word, P, slips)) &&
+          !words.some((_, offset) => P.never.has(tokens[start + offset]))
+        ) {
           length = Math.max(length, words.length);
         }
       }
