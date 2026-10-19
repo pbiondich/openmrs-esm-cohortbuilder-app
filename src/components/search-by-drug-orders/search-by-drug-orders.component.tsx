@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { Column, DatePicker, DatePickerInput, Dropdown, MultiSelect } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
-import { showSnackbar } from '@openmrs/esm-framework';
+import { showSnackbar, useConfig } from '@openmrs/esm-framework';
+import { type ConfigObject } from '../../config-schema';
 import type { DropdownValue, DrugOrderDetails, SearchByProps } from '../../types';
 import { getDescription, getQueryDetails } from './search-by-drug-orders.utils';
 import { useCareSettings, useDrugs } from './search-by-drug-orders.resources';
@@ -11,6 +12,7 @@ import styles from './search-by-drug-orders.style.scss';
 
 const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
   const { t } = useTranslation();
+  const { drugOrderSearchDefinitionKey } = useConfig<ConfigObject>();
   const { drugs, drugsError } = useDrugs();
   const { careSettings, careSettingsError } = useCareSettings();
   const [activeOnOrAfter, setActiveOnOrAfter] = useState('');
@@ -21,23 +23,27 @@ const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
   const [selectedCareSetting, setSelectedCareSetting] = useState<DropdownValue>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  if (drugsError) {
-    showSnackbar({
-      title: t('error', 'Error'),
-      kind: 'error',
-      isLowContrast: false,
-      subtitle: drugsError?.message,
-    });
-  }
+  useEffect(() => {
+    if (drugsError) {
+      showSnackbar({
+        title: t('error', 'Error'),
+        kind: 'error',
+        isLowContrast: false,
+        subtitle: drugsError?.message,
+      });
+    }
+  }, [drugsError, t]);
 
-  if (careSettingsError) {
-    showSnackbar({
-      title: t('error', 'Error'),
-      kind: 'error',
-      isLowContrast: false,
-      subtitle: careSettingsError?.message,
-    });
-  }
+  useEffect(() => {
+    if (careSettingsError) {
+      showSnackbar({
+        title: t('error', 'Error'),
+        kind: 'error',
+        isLowContrast: false,
+        subtitle: careSettingsError?.message,
+      });
+    }
+  }, [careSettingsError, t]);
 
   const handleResetInputs = () => {
     setSelectedDrugs(null);
@@ -58,7 +64,7 @@ const SearchByDrugOrder: React.FC<SearchByProps> = ({ onSubmit }) => {
       activatedOnOrAfter,
       activatedOnOrBefore,
     };
-    await onSubmit(getQueryDetails(drugOrderParams), getDescription(drugOrderParams));
+    await onSubmit(getQueryDetails(drugOrderParams, drugOrderSearchDefinitionKey), getDescription(drugOrderParams));
     setIsLoading(false);
   };
 

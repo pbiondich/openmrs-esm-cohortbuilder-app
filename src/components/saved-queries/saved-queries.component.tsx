@@ -10,7 +10,7 @@ import mainStyles from '../../cohort-builder.scss';
 import styles from './saved-queries.scss';
 
 interface SavedQueriesProps {
-  onViewQuery: (queryId: string) => Promise<void>;
+  onViewQuery: (queryId: string) => Promise<boolean>;
 }
 
 const SavedQueries: React.FC<SavedQueriesProps> = ({ onViewQuery }) => {
