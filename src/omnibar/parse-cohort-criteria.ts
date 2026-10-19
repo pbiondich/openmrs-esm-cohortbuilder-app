@@ -443,7 +443,10 @@ function readWindow(
 ): { next: number; window: TestWindow } | null {
   const last = matchPhrase(tokens, start, P.windowStart);
   if (last !== null) {
-    const count = readNumber(tokens, last, P);
+    // A whole number of up to four digits ("3650 days"), or a small one in words ("six months").
+    const count = /^\d{1,4}$/.test(tokens[last] ?? '')
+      ? { value: Number(tokens[last]), next: last + 1 }
+      : readNumber(tokens, last, P);
     if (!count || count.value < 1) return null;
     const unit = longestOf(
       tokens,
@@ -528,6 +531,16 @@ const isAge = (value: number | undefined) =>
 const joiners = new Set(['and', 'with']);
 const isPopulation = (clause: Clause) => clause.kind === 'gender' || (clause.kind === 'age' && clause.group);
 const operatorSigns: Record<TestOperator, string> = { lt: '<', le: '<=', eq: '=', ge: '>=', gt: '>' };
+
+/** The result, in the words the builder's Concepts tab uses for it. */
+const resultWords: Record<TestResult, string> = {
+  latest: 'most recent',
+  first: 'earliest',
+  lowest: 'lowest',
+  highest: 'highest',
+  any: 'any',
+  average: 'average',
+};
 
 /**
  * The question's clauses in order, or where reading stopped: the first word that is neither part of
@@ -812,7 +825,9 @@ export function parseCohortCriteria(text: string, config: CohortCriteriaConfig):
     ...drugGroups.map((group) => `on ${group.label}`),
     ...encounterTypes.map((encounterType) => `with ${encounterType.label} encounters`),
     ...tests.map(({ test, operator, value, which }) =>
-      [`with ${which ?? 'latest'} ${test.label}`, operatorSigns[operator], value, test.units].filter(Boolean).join(' '),
+      [`with ${resultWords[which ?? 'latest']} ${test.label}`, operatorSigns[operator], value, test.units]
+        .filter(Boolean)
+        .join(' '),
     ),
   ]
     .filter(Boolean)
