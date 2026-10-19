@@ -103,7 +103,11 @@ export function useUrlDefinition({
 function readLinkRequest(params: URLSearchParams): UrlRequest {
   try {
     return readUrlRequest(params);
-  } catch {
+  } catch (error) {
+    if (!(error instanceof LinkError)) {
+      // A bug, not a bad link. Its name only: the message could quote the link.
+      console.error(`Cohort builder: reading a link failed with ${error?.name ?? 'an error'}`);
+    }
     throw new LinkError('invalidCohortLink', "This link isn't a valid cohort query");
   }
 }
