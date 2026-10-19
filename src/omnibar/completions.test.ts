@@ -94,6 +94,14 @@ describe('completions from the count row', () => {
     expect(completionsFor('', config, () => undefined)).toEqual([]);
   });
 
+  it('skips a name too long to fit a completion with its trailing space, rather than cutting it', () => {
+    const long: CohortTest = { ...viralLoad, label: `Viral ${'x'.repeat(114)}`, aliases: [] };
+    expect(long.label).toHaveLength(120);
+    expect(completionsFor('women with vir', config, () => [long, viralLoad]).map(({ label }) => label)).toEqual([
+      'Viral load',
+    ]);
+  });
+
   it('keeps at most five', () => {
     const many = Array.from({ length: 8 }, (_, i) => ({
       uuid: `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`,
