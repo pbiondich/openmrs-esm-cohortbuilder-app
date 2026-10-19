@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { getSessionStore, openmrsFetch, restBaseUrl } from '@openmrs/esm-framework';
 import type { Query } from '../types';
 import { isUuid } from '../url-definition/url-definition';
-import { isServerUnreachable } from './omnibar-contract';
 import { isPlainObject } from './saved-search.resource';
 
 /**
@@ -108,7 +107,7 @@ export interface CohortCountState {
   count?: number;
   loading: boolean;
   error: boolean;
-  /** The request failed because the server couldn't be reached. */
+  /** The server couldn't be reached or failed to answer. */
   unavailable: boolean;
 }
 
@@ -173,7 +172,7 @@ export function useCohortCount(key: string | null, query: Query | null, delayMs:
         },
         (error: unknown) => {
           if (controller.signal.aborted || user !== currentUser()) return;
-          setState({ ...settled(key, user), error: true, unavailable: isServerUnreachable(error) });
+          setState({ ...settled(key, user), error: true, unavailable: !(error instanceof UnreadableCountError) });
         },
       );
     const timer = reask ? undefined : setTimeout(ask, Math.max(0, delayMs));
