@@ -194,8 +194,7 @@ describe('the paraphrase set', () => {
     ['women under 30 on ARVs', [women(undefined, 29), onArvs]],
     ['female children under 5', [women(undefined, 4)]],
     ['women under 5', [women(undefined, 4)]],
-    ['women and under 30', [women(undefined, 29)]],
-    ['women, 15-49, on ARVs', [women(15, 49), onArvs]],
+    ['female children under 5 years', [women(undefined, 4)]],
     ['women aged 15-49, enrolled in HIV', [women(15, 49), inHiv]],
     ['patients in the HIV program, the TB program', [inHiv, inTb]],
     ['adolescent girls in the PMTCT program', [women(10, 19), inPmtct]],
@@ -284,11 +283,17 @@ describe('the paraphrase set', () => {
     'children under 5 and women',
     'adolescents under 15 and women',
     'women on ARVs and children',
-    // "under 5" is a bound and the named group "under 5" both, so after "and" it is a second population.
+    // An age right after "and", "with" or a comma that follows a population may be a second one.
     'women and under 5',
     'women and under five',
     'kids and under 5',
     'women with under 5',
+    'women and under 5 years',
+    'women and under five years',
+    'women and under five years old',
+    'kids and under 5 years',
+    'women and under 30',
+    'women, 15-49, on ARVs',
     // A comma joins two populations as "and" does.
     'women, children',
     'children, women',
@@ -387,7 +392,7 @@ describe('every phrase in the English table', () => {
   });
 
   it.each(englishPhrases.stopwords)('skips stopword %j around a question', (word) => {
-    expect(criteriaOf(`${word} women ${word} under 30 ${word}`)).toEqual([women(undefined, 29)]);
+    expect(criteriaOf(`${word} under 30 ${word} women ${word}`)).toEqual([women(undefined, 29)]);
   });
 
   it.each(englishPhrases.never)('offers nothing when %j is in the question', (word) => {
