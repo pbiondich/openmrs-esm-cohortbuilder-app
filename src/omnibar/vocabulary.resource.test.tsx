@@ -139,6 +139,21 @@ describe('the server vocabulary', () => {
     expect(criteria('patients in the malaria program')).toBeNull();
   });
 
+  it('knows a hyphenated name without its hyphen too', () => {
+    const config: CohortCriteriaConfig = {
+      drugCriteriaEnabled: false,
+      drugGroups: [],
+      ...mergeVocabulary(
+        { programs: [], encounterTypes: [] },
+        toServerVocabulary({ results: [{ uuid: tb, name: 'MDR-TB Program' }] }, {}, 'en'),
+      ),
+    };
+    const texts = ['enrolled in MDR TB', 'enrolled in MDR-TB', 'patients in the MDR TB program', 'MDR-TB clinic'];
+    expect(texts.map((text) => [text, parseCohortCriteria(text, config)?.criteria])).toEqual(
+      texts.map((text) => [text, [{ type: 'enrollment', programs: [tb] }]]),
+    );
+  });
+
   it('reads nothing for a name two programs share', () => {
     const twins = {
       results: [
