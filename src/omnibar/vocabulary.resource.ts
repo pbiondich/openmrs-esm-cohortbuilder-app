@@ -10,7 +10,8 @@ import { isPlainObject } from './saved-search.resource';
  * config: a program by its name, every name its concept has in any language (CIEL gives most programs
  * several), and each of those without a trailing program word (any of the table's `programNouns`:
  * "program", "clinic", "service" and the rest); an encounter type by its name. Asked for once per user
- * and language, when the bar first mounts the count row, never per keystroke; the parser itself still makes no request.
+ * and language, when the bar first mounts the count row, never per keystroke; the parser itself still
+ * makes no request.
  *
  * Limits: the first 100 of each (REST pages), and a concept's voided names too, since REST doesn't
  * say which names are voided. A user who may not read programs or encounter types gets config alone.
