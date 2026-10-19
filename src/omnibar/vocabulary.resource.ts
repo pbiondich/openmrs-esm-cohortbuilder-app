@@ -115,6 +115,7 @@ export function mergeVocabulary(
 const currentUser = (): string | undefined => getSessionStore().getState().session?.user?.uuid;
 
 let cached: { key: string; value?: ServerVocabulary; promise?: Promise<ServerVocabulary> } | null = null;
+// Set once for the page's life: the subscription outlives forgetServerVocabulary, which resets only `cached`.
 let following = false;
 
 /**
