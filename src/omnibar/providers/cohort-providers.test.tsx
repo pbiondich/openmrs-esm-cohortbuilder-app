@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import {
   type FetchResponse,
   getDefaultsFromConfigSchema,
+  getSessionStore,
   openmrsFetch,
   restBaseUrl,
   useConfig,
@@ -422,6 +423,28 @@ describe('CohortCountProvider', () => {
     view.rerender('how many women under 30?');
     expect(view.last()).toMatchObject({ status: 'ready' });
     expect(view.last().results[0].title).toBe('3 patients');
+    expect(requests()).toHaveLength(2);
+  });
+
+  it('never shows one user a count remembered for another, on a workstation shared without a reload', async () => {
+    const loggedIn = (uuid: string | null) =>
+      getSessionStore().setState({
+        loaded: true,
+        session: uuid ? ({ authenticated: true, user: { uuid } } as never) : ({ authenticated: false } as never),
+      });
+    onTestFinished(() => {
+      getSessionStore().setState({ loaded: false, session: null });
+    });
+    loggedIn('a1b2c3d4-0000-4000-8000-00000000000a');
+    renderProvider(CohortCountProvider, 'women under 30');
+    await settle();
+    expect(requests()).toHaveLength(1);
+
+    loggedIn(null);
+    loggedIn('a1b2c3d4-0000-4000-8000-00000000000b');
+    const { last } = renderProvider(CohortCountProvider, 'women under 30');
+    expect(last()).toMatchObject({ status: 'loading' });
+    await settle();
     expect(requests()).toHaveLength(2);
   });
 
