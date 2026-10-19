@@ -16,6 +16,7 @@ const programUuid = '64f950e6-1b07-4ac0-8e7e-f3e148f3463f';
 const drugUuid = '3cfcf118-931c-46f7-8ff6-7b876f0d4202';
 const otherDrugUuid = '5cfcf118-931c-46f7-8ff6-7b876f0d4203';
 const cielStyleUuid = '1065AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const encounterTypeUuid = 'e22e39fd-7db2-45e7-80f1-60fa0d5a4378';
 
 const validDefinition = {
   v: 1,
@@ -268,7 +269,7 @@ describe('validateDefinition', () => {
           activeOnOrAfter: '2024-02-29',
           activeOnOrBefore: 'today',
         },
-        { type: 'enrollment', programs: Array(10).fill(programUuid) },
+        { type: 'encounter', encounterTypes: Array(10).fill(encounterTypeUuid) },
       ],
     };
     expect(validateDefinition(definition)).toEqual(definition);
@@ -315,6 +316,7 @@ describe('validateDefinition', () => {
     ['a null criterion', null, 'Criterion 1: "type" must be'],
     ['a missing type', { gender: 'male' }, 'Criterion 1: "type" must be'],
     ['an unknown type', { type: 'concept', concept: cielStyleUuid }, 'Criterion 1: "type" must be'],
+    ['a type that is a prototype key', { type: 'constructor' }, 'Criterion 1: "type" must be'],
     ['an array criterion', Object.assign(['x'], { type: 'demographics' }), 'Criterion 1 must be a JSON object'],
 
     ['an unknown demographics key', { type: 'demographics', gender: 'male', alive: true }, 'unknown key "alive"'],
@@ -384,6 +386,29 @@ describe('validateDefinition', () => {
       { type: 'drugOrder', drugs: [drugUuid], activeOnOrBefore: '2024-13-01' },
       '"activeOnOrBefore" must be "today" or a date',
     ],
+
+    [
+      'an unknown encounter key',
+      { type: 'encounter', encounterTypes: [encounterTypeUuid], formList: [encounterTypeUuid] },
+      'unknown key "formList"',
+    ],
+    ['missing encounter types', { type: 'encounter' }, '"encounterTypes" must list 1 to 10 uuids'],
+    ['no encounter types', { type: 'encounter', encounterTypes: [] }, '"encounterTypes" must list 1 to 10 uuids'],
+    [
+      '11 encounter types',
+      { type: 'encounter', encounterTypes: Array(11).fill(encounterTypeUuid) },
+      '"encounterTypes" must list 1 to 10 uuids',
+    ],
+    [
+      'an encounter type that is not a uuid',
+      { type: 'encounter', encounterTypes: ['Adult Visit'] },
+      '"encounterTypes" must list 1 to 10 uuids',
+    ],
+    [
+      'a definition library key in place of an encounter type',
+      { type: 'encounter', encounterTypes: ['reporting.library.cohortDefinition.builtIn.males'] },
+      '"encounterTypes" must list 1 to 10 uuids',
+    ],
   ])('rejects %s', (_, criterion, message) => {
     expect(() => validateDefinition(withCriterion(criterion))).toThrow(message);
   });
@@ -432,6 +457,7 @@ describe('buildSearch', () => {
     [programUuid, 'HIV Program'],
     [drugUuid, 'Triomune-30'],
     [otherDrugUuid, 'Efavirenz'],
+    [encounterTypeUuid, 'Adult Visit'],
   ]);
 
   beforeEach(() => {
@@ -495,6 +521,24 @@ describe('buildSearch', () => {
     ).toBe('Patients who taking Triomune-30 and 2 more drugs');
   });
 
+  it('searches encounters by type only, as the encounters tab does, and describes them with their names', () => {
+    const search = buildSearch(
+      { type: 'encounter', encounterTypes: [encounterTypeUuid, cielStyleUuid] },
+      names,
+      drugOrderSearchKey,
+    );
+    expect(search.searchParams.query.rowFilters).toEqual([
+      {
+        key: 'reporting.library.cohortDefinition.builtIn.encounterSearchAdvanced',
+        parameterValues: { encounterTypeList: [encounterTypeUuid, cielStyleUuid] },
+        type: 'org.openmrs.module.reporting.dataset.definition.PatientDataSetDefinition',
+      },
+    ]);
+    expect(search.searchParams.query.customRowFilterCombination).toBe('1');
+    // The encounters tab's own words, double space and all: it swaps the last comma for " and ".
+    expect(search.description).toBe('Patients with Encounter of Types Adult Visit and  1 more encounter type');
+  });
+
   it('describes drug orders with drug names and dates', () => {
     expect(
       buildSearch(
@@ -535,5 +579,12 @@ describe('golden contract fixtures', () => {
     expect(url.startsWith('${openmrsSpaBase}/cohort-builder?definition=')).toBe(true);
     const params = new URLSearchParams(url.split('?')[1]);
     expect(readUrlRequest(params)).toEqual({ type: 'definition', definition });
+  });
+
+  // Criteria → encode → decode → the same criteria, and the very link the omnibar shipped.
+  it.each(goldenFixtures)('round-trips the definition for "$text"', ({ url, definition }) => {
+    const encoded = encodeDefinition(definition as CohortDefinition);
+    expect(encoded).toBe(new URLSearchParams(url.split('?')[1]).get('definition'));
+    expect(decodeDefinition(encoded).criteria).toEqual(definition.criteria);
   });
 });
