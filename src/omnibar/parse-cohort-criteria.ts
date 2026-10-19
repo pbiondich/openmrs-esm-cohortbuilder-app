@@ -214,20 +214,29 @@ export function oneSlipApart(a: string, b: string): boolean {
 }
 
 /**
- * A typed word for a word of a name: the same, or, when allowed, one slip away in a word of five
- * letters or more that isn't a word of the phrase table.
+ * How many slips the words typed from `start` are from a name, or null when they aren't that name: a
+ * slip is allowed in a word of five letters or more that isn't a word of the phrase table. A name never
+ * takes a word from `never`, so "Not HIV Program" can't make "not" part of a criterion.
  */
-function sameWord(typed: string | undefined, word: string, P: CompiledPhrases, slips: boolean): boolean {
-  if (typed === word) return true;
-  return (
-    slips &&
-    typed !== undefined &&
-    typed.length >= 5 &&
-    word.length >= 5 &&
-    /^\p{L}+$/u.test(typed) &&
-    !P.knownWords.has(typed) &&
-    oneSlipApart(typed, word)
-  );
+function slipsFrom(words: Array<string>, tokens: Array<string>, start: number, P: CompiledPhrases): number | null {
+  let slips = 0;
+  for (let offset = 0; offset < words.length; offset++) {
+    const typed = tokens[start + offset];
+    const word = words[offset];
+    if (typed === undefined || P.never.has(typed)) return null;
+    if (typed === word) continue;
+    if (
+      typed.length < 5 ||
+      word.length < 5 ||
+      !/^\p{L}+$/u.test(typed) ||
+      P.knownWords.has(typed) ||
+      !oneSlipApart(typed, word)
+    ) {
+      return null;
+    }
+    slips++;
+  }
+  return slips;
 }
 
 type Named = { label: string; aliases: Array<string> };
@@ -246,8 +255,8 @@ function namesOf(item: Named): Array<Array<string>> {
 
 /**
  * The item whose label or alias matches the most words from `start`: exactly if any does, else with
- * a slip in a long word ("tuberculoses", "diabetis"). Two items reading the same words is ambiguous,
- * so neither matches. A name never takes a word from `never`: "Not HIV Program" can't make "not" a criterion.
+ * one slip in the whole name ("tuberculoses", "diabetis"). Two items reading the same words is
+ * ambiguous, so neither matches.
  */
 function longestAlias<T extends Named>(
   tokens: Array<string>,
@@ -255,16 +264,13 @@ function longestAlias<T extends Named>(
   items: Array<T>,
   P: CompiledPhrases,
 ): { item: T; next: number } | null {
-  for (const slips of [false, true]) {
+  for (const slips of [0, 1]) {
     let best: { item: T; next: number } | null = null;
     let tied = false;
     for (const item of items) {
       let length = 0;
       for (const words of namesOf(item)) {
-        if (
-          words.every((word, offset) => sameWord(tokens[start + offset], word, P, slips)) &&
-          !words.some((_, offset) => P.never.has(tokens[start + offset]))
-        ) {
+        if (slipsFrom(words, tokens, start, P) === slips) {
           length = Math.max(length, words.length);
         }
       }
